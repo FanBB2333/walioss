@@ -5,6 +5,8 @@
   justify-content: center;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   padding: 20px;
+  padding-top: 48px;
+  /* Space for macOS titlebar */
 }
 
 .login-card {
@@ -278,7 +280,7 @@
   .login-card {
     padding: 32px 24px;
   }
-  
+
   .form-row {
     grid-template-columns: 1fr;
   }

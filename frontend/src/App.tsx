@@ -24,37 +24,50 @@ function App() {
 
   const handleThemeChange = (newTheme: string) => {
     setTheme(newTheme);
-    // Could apply theme class to body here
     document.body.className = newTheme === 'light' ? 'theme-light' : 'theme-dark';
   };
 
+  // Titlebar drag region for macOS
+  const TitlebarDrag = () => <div className="titlebar-drag" />;
+
   if (currentView === 'login') {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <>
+        <TitlebarDrag />
+        <Login onLoginSuccess={handleLoginSuccess} />
+      </>
+    );
   }
 
   if (currentView === 'settings') {
     return (
-      <Settings 
-        onBack={() => setCurrentView('dashboard')} 
-        onThemeChange={handleThemeChange}
-      />
+      <>
+        <TitlebarDrag />
+        <Settings 
+          onBack={() => setCurrentView('dashboard')} 
+          onThemeChange={handleThemeChange}
+        />
+      </>
     );
   }
 
   return (
-    <div className="dashboard-container">
-      <header className="dashboard-header">
-        <h1>Walioss</h1>
-        <div className="header-info">
-          <span>Region: {currentConfig?.region}</span>
-          <button className="btn-settings" onClick={() => setCurrentView('settings')}>Settings</button>
-          <button className="btn-logout" onClick={handleLogout}>Logout</button>
-        </div>
-      </header>
-      <main className="dashboard-main">
-        {currentConfig && <FileBrowser config={currentConfig} />}
-      </main>
-    </div>
+    <>
+      <TitlebarDrag />
+      <div className="dashboard-container">
+        <header className="dashboard-header">
+          <h1>Walioss</h1>
+          <div className="header-info">
+            <span>Region: {currentConfig?.region}</span>
+            <button className="btn-settings" onClick={() => setCurrentView('settings')}>Settings</button>
+            <button className="btn-logout" onClick={handleLogout}>Logout</button>
+          </div>
+        </header>
+        <main className="dashboard-main">
+          {currentConfig && <FileBrowser config={currentConfig} />}
+        </main>
+      </div>
+    </>
   );
 }
 

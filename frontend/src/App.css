@@ -18,6 +18,17 @@ body {
     color: #ffffff;
 }
 
+/* macOS titlebar drag region */
+.titlebar-drag {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    -webkit-app-region: drag;
+    z-index: 9999;
+}
+
 /* Dashboard styles */
 .dashboard-container {
     min-height: 100vh;
@@ -31,6 +42,8 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 16px 24px;
+    padding-top: 40px;
+    /* Space for macOS titlebar */
     background: rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
