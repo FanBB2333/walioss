@@ -1,5 +1,23 @@
 export namespace main {
 	
+	export class AppSettings {
+	    ossutilPath: string;
+	    defaultRegion: string;
+	    defaultEndpoint: string;
+	    theme: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ossutilPath = source["ossutilPath"];
+	        this.defaultRegion = source["defaultRegion"];
+	        this.defaultEndpoint = source["defaultEndpoint"];
+	        this.theme = source["theme"];
+	    }
+	}
 	export class BucketInfo {
 	    name: string;
 	    region: string;

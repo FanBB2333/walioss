@@ -30,6 +30,10 @@ export function GetProfile(arg1) {
   return window['go']['main']['OSSService']['GetProfile'](arg1);
 }
 
+export function GetSettings() {
+  return window['go']['main']['OSSService']['GetSettings']();
+}
+
 export function ListBuckets(arg1) {
   return window['go']['main']['OSSService']['ListBuckets'](arg1);
 }
@@ -44,6 +48,10 @@ export function LoadProfiles() {
 
 export function SaveProfile(arg1) {
   return window['go']['main']['OSSService']['SaveProfile'](arg1);
+}
+
+export function SaveSettings(arg1) {
+  return window['go']['main']['OSSService']['SaveSettings'](arg1);
 }
 
 export function SetOssutilPath(arg1) {

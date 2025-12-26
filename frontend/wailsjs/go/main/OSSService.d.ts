@@ -16,6 +16,8 @@ export function GetOssutilPath():Promise<string>;
 
 export function GetProfile(arg1:string):Promise<main.OSSProfile>;
 
+export function GetSettings():Promise<main.AppSettings>;
+
 export function ListBuckets(arg1:main.OSSConfig):Promise<Array<main.BucketInfo>>;
 
 export function ListObjects(arg1:main.OSSConfig,arg2:string,arg3:string):Promise<Array<main.ObjectInfo>>;
@@ -23,6 +25,8 @@ export function ListObjects(arg1:main.OSSConfig,arg2:string,arg3:string):Promise
 export function LoadProfiles():Promise<Array<main.OSSProfile>>;
 
 export function SaveProfile(arg1:main.OSSProfile):Promise<void>;
+
+export function SaveSettings(arg1:main.AppSettings):Promise<void>;
 
 export function SetOssutilPath(arg1:string):Promise<void>;
 

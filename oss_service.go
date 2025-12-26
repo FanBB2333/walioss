@@ -441,3 +441,51 @@ func (s *OSSService) saveProfiles(profiles []OSSProfile) error {
 
 	return os.WriteFile(configPath, data, 0600)
 }
+
+// GetSettings loads application settings
+func (s *OSSService) GetSettings() (AppSettings, error) {
+	settingsPath := filepath.Join(s.configDir, "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Return defaults
+			return AppSettings{
+				OssutilPath: "ossutil",
+				Theme:       "dark",
+			}, nil
+		}
+		return AppSettings{}, err
+	}
+
+	var settings AppSettings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return AppSettings{}, err
+	}
+
+	// Apply ossutil path if set
+	if settings.OssutilPath != "" {
+		s.ossutilPath = settings.OssutilPath
+	}
+
+	return settings, nil
+}
+
+// SaveSettings persists application settings
+func (s *OSSService) SaveSettings(settings AppSettings) error {
+	if err := os.MkdirAll(s.configDir, 0700); err != nil {
+		return err
+	}
+
+	// Apply ossutil path immediately
+	if settings.OssutilPath != "" {
+		s.ossutilPath = settings.OssutilPath
+	}
+
+	settingsPath := filepath.Join(s.configDir, "settings.json")
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(settingsPath, data, 0600)
+}
