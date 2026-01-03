@@ -82,7 +82,10 @@ function App() {
   };
 
   const closeTab = (tabId: string) => {
-    if (tabs.length <= 1) return;
+    if (tabs.length <= 1) {
+      handleLogout();
+      return;
+    }
     setTabs((prev) => prev.filter((t) => t.id !== tabId));
   };
 
@@ -114,20 +117,18 @@ function App() {
                 >
                   <span className="window-tab-icon">{index + 1}</span>
                   <span className="window-tab-title">{t.title}</span>
-                  {tabs.length > 1 && (
-                    <button
-                      className="window-tab-close"
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTab(t.id);
-                      }}
-                      aria-label="Close tab"
-                      title="Close"
-                    >
-                      ×
-                    </button>
-                  )}
+                  <button
+                    className="window-tab-close"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(t.id);
+                    }}
+                    aria-label="Close tab"
+                    title="Close"
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
             {sessionConfig && (
