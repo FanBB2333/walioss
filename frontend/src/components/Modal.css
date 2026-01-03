@@ -14,7 +14,7 @@
 }
 
 .modal-content {
-    background: #3a4f5f;
+    background: #1a1a2e;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
     padding: 24px;
@@ -108,7 +108,7 @@
 
 .context-menu {
     position: fixed;
-    background: #3a4f5f;
+    background: #1e1e36;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     padding: 4px;

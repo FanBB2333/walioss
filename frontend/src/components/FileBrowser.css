@@ -109,19 +109,19 @@
 .bucket-item:hover {
     background: rgba(255, 255, 255, 0.08);
     transform: translateY(-2px);
-    border-color: rgba(126, 184, 219, 0.4);
+    border-color: rgba(79, 172, 254, 0.3);
     box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.3);
 }
 
 .bucket-icon {
     width: 40px;
     height: 40px;
-    background: rgba(126, 184, 219, 0.15);
+    background: rgba(79, 172, 254, 0.1);
     border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #7eb8db;
+    color: #4facfe;
 }
 
 .bucket-name {
@@ -192,12 +192,12 @@
 }
 
 .folder-icon {
-    color: #d4a5a5;
-    /* Light muted red for folders */
+    color: #fca5a5;
+    /* Light red/orange for folders */
 }
 
 .item-icon {
-    color: #9acfe5;
+    color: #93c5fd;
     /* Light blue for files */
 }
 
@@ -220,7 +220,7 @@
     width: 32px;
     height: 32px;
     border: 3px solid rgba(255, 255, 255, 0.1);
-    border-top-color: #7eb8db;
+    border-top-color: #4facfe;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }

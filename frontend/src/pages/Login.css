@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #4a5f6f 0%, #5a7080 50%, #6a8595 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   padding: 20px;
   padding-top: 48px;
   /* Space for macOS titlebar */
@@ -81,8 +81,8 @@
 
 .form-input:focus {
   background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(126, 184, 219, 0.6);
-  box-shadow: 0 0 0 4px rgba(126, 184, 219, 0.2);
+  border-color: rgba(79, 172, 254, 0.5);
+  box-shadow: 0 0 0 4px rgba(79, 172, 254, 0.15);
 }
 
 .form-input.error {
@@ -116,11 +116,11 @@
 }
 
 .profile-select:focus {
-  border-color: rgba(126, 184, 219, 0.6);
+  border-color: rgba(79, 172, 254, 0.5);
 }
 
 .profile-select option {
-  background: #3a4f5f;
+  background: #1a1a2e;
   color: #ffffff;
 }
 
@@ -171,13 +171,13 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #7eb8db 0%, #9acfe5 100%);
-  color: #2a3f4f;
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: #1a1a2e;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px -10px rgba(126, 184, 219, 0.5);
+  box-shadow: 0 10px 30px -10px rgba(79, 172, 254, 0.5);
 }
 
 .btn-primary:active {
@@ -238,9 +238,9 @@
 }
 
 .message.info {
-  background: rgba(126, 184, 219, 0.15);
-  border: 1px solid rgba(126, 184, 219, 0.3);
-  color: #9acfe5;
+  background: rgba(79, 172, 254, 0.15);
+  border: 1px solid rgba(79, 172, 254, 0.3);
+  color: #7dd3fc;
 }
 
 .message-icon {
@@ -267,7 +267,7 @@
 .save-profile-section input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  accent-color: #7eb8db;
+  accent-color: #4facfe;
   cursor: pointer;
 }
 
