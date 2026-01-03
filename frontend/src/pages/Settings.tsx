@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { main } from '../../wailsjs/go/models';
-import { GetSettings, SaveSettings, CheckOssutilInstalled } from '../../wailsjs/go/main/OSSService';
+import { GetSettings, SaveSettings, CheckOssutilInstalled, GetOssutilPath, SetOssutilPath } from '../../wailsjs/go/main/OSSService';
 import './Settings.css';
 
 interface SettingsProps {
@@ -10,7 +10,7 @@ interface SettingsProps {
 
 function Settings({ onBack, onThemeChange }: SettingsProps) {
   const [settings, setSettings] = useState<main.AppSettings>({
-    ossutilPath: 'ossutil',
+    ossutilPath: '',
     defaultRegion: '',
     defaultEndpoint: '',
     theme: 'dark',
@@ -51,11 +51,11 @@ function Settings({ onBack, onThemeChange }: SettingsProps) {
   const handleTestOssutil = async () => {
     setLoading(true);
     setMessage(null);
+    let originalPath: string | null = null;
     try {
-      // Temporarily apply the path to test
-      const tempSettings = { ...settings };
-      await SaveSettings(tempSettings);
-      
+      originalPath = await GetOssutilPath();
+      await SetOssutilPath(settings.ossutilPath);
+
       const result = await CheckOssutilInstalled();
       if (result.success) {
         setMessage({ type: 'success', text: `ossutil found: ${result.message}` });
@@ -65,6 +65,11 @@ function Settings({ onBack, onThemeChange }: SettingsProps) {
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Test failed' });
     } finally {
+      if (originalPath !== null) {
+        try {
+          await SetOssutilPath(originalPath);
+        } catch {}
+      }
       setLoading(false);
     }
   };
@@ -87,7 +92,7 @@ function Settings({ onBack, onThemeChange }: SettingsProps) {
               className="form-input"
               value={settings.ossutilPath}
               onChange={(e) => setSettings({ ...settings, ossutilPath: e.target.value })}
-              placeholder="ossutil (default: system PATH)"
+              placeholder="Leave empty to use auto-detected ossutil"
             />
           </div>
           <button 

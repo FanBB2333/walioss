@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -54,8 +56,9 @@ func suggestServiceEndpoint(region string) string {
 
 // OSSService handles OSS operations via ossutil
 type OSSService struct {
-	ossutilPath string
-	configDir   string
+	ossutilPath        string
+	defaultOssutilPath string
+	configDir          string
 }
 
 // NewOSSService creates a new OSSService instance
@@ -93,13 +96,73 @@ func NewOSSService() *OSSService {
 	}
 
 	return &OSSService{
-		ossutilPath: ossutilPath,
-		configDir:   filepath.Join(homeDir, ".walioss"),
+		ossutilPath:        ossutilPath,
+		defaultOssutilPath: ossutilPath,
+		configDir:          filepath.Join(homeDir, ".walioss"),
 	}
+}
+
+func ossutilStartFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// If the process started but exited non-zero, it's a real ossutil error (no fallback).
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return false
+	}
+
+	// Failed to start (not found / permission / path issue) → try fallback.
+	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrPermission)
+}
+
+func ossutilOutputOrError(err error, output []byte) string {
+	msg := strings.TrimSpace(string(output))
+	if msg != "" {
+		return msg
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (s *OSSService) runOssutil(args ...string) ([]byte, error) {
+	primary := strings.TrimSpace(s.ossutilPath)
+	fallback := strings.TrimSpace(s.defaultOssutilPath)
+
+	if primary == "" {
+		primary = fallback
+	}
+	if primary == "" {
+		primary = "ossutil"
+	}
+
+	cmd := exec.Command(primary, args...)
+	output, err := cmd.CombinedOutput()
+	if err == nil || !ossutilStartFailed(err) || fallback == "" || fallback == primary {
+		return output, err
+	}
+
+	// Retry with the auto-discovered ossutil path.
+	fallbackCmd := exec.Command(fallback, args...)
+	fallbackOutput, fallbackErr := fallbackCmd.CombinedOutput()
+	if fallbackErr == nil || !ossutilStartFailed(fallbackErr) {
+		// Stick to the working one for subsequent operations.
+		s.ossutilPath = fallback
+		return fallbackOutput, fallbackErr
+	}
+
+	return output, err
 }
 
 // SetOssutilPath sets custom ossutil binary path
 func (s *OSSService) SetOssutilPath(path string) {
+	if strings.TrimSpace(path) == "" {
+		s.ossutilPath = s.defaultOssutilPath
+		return
+	}
 	s.ossutilPath = path
 }
 
@@ -136,8 +199,7 @@ func (s *OSSService) TestConnection(config OSSConfig) ConnectionResult {
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	cmd := exec.Command(s.ossutilPath, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := s.runOssutil(args...)
 
 	if err != nil {
 		return ConnectionResult{
@@ -280,10 +342,9 @@ func (s *OSSService) ListBuckets(config OSSConfig) ([]BucketInfo, error) {
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	cmd := exec.Command(s.ossutilPath, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := s.runOssutil(args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list buckets: %s", string(output))
+		return nil, fmt.Errorf("failed to list buckets: %s", ossutilOutputOrError(err, output))
 	}
 
 	return s.parseBucketList(string(output)), nil
@@ -346,11 +407,10 @@ func (s *OSSService) ListObjects(config OSSConfig, bucketName string, prefix str
 	// Use directory mode to simulate folder structure
 	args = append(args, "-d")
 
-	cmd := exec.Command(s.ossutilPath, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := s.runOssutil(args...)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to list objects: %s", string(output))
+		return nil, fmt.Errorf("failed to list objects: %s", ossutilOutputOrError(err, output))
 	}
 
 	return s.parseObjectList(string(output), bucketName, prefix), nil
@@ -460,11 +520,10 @@ func (s *OSSService) DownloadFile(config OSSConfig, bucket string, object string
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	cmd := exec.Command(s.ossutilPath, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := s.runOssutil(args...)
 
 	if err != nil {
-		return fmt.Errorf("download failed: %s", string(output))
+		return fmt.Errorf("download failed: %s", ossutilOutputOrError(err, output))
 	}
 
 	return nil
@@ -491,11 +550,10 @@ func (s *OSSService) UploadFile(config OSSConfig, bucket string, prefix string, 
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	cmd := exec.Command(s.ossutilPath, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := s.runOssutil(args...)
 
 	if err != nil {
-		return fmt.Errorf("upload failed: %s", string(output))
+		return fmt.Errorf("upload failed: %s", ossutilOutputOrError(err, output))
 	}
 
 	return nil
@@ -525,11 +583,10 @@ func (s *OSSService) DeleteObject(config OSSConfig, bucket string, object string
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	cmd := exec.Command(s.ossutilPath, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := s.runOssutil(args...)
 
 	if err != nil {
-		return fmt.Errorf("delete failed: %s", string(output))
+		return fmt.Errorf("delete failed: %s", ossutilOutputOrError(err, output))
 	}
 
 	return nil
@@ -537,8 +594,7 @@ func (s *OSSService) DeleteObject(config OSSConfig, bucket string, object string
 
 // CheckOssutilInstalled checks if ossutil is installed and accessible
 func (s *OSSService) CheckOssutilInstalled() ConnectionResult {
-	cmd := exec.Command(s.ossutilPath, "version")
-	output, err := cmd.CombinedOutput()
+	output, err := s.runOssutil("version")
 
 	if err != nil {
 		return ConnectionResult{
@@ -572,7 +628,7 @@ func (s *OSSService) GetSettings() (AppSettings, error) {
 		if os.IsNotExist(err) {
 			// Return defaults
 			return AppSettings{
-				OssutilPath: "ossutil",
+				OssutilPath: "",
 				Theme:       "dark",
 			}, nil
 		}
@@ -584,8 +640,10 @@ func (s *OSSService) GetSettings() (AppSettings, error) {
 		return AppSettings{}, err
 	}
 
-	// Apply ossutil path if set
-	if settings.OssutilPath != "" {
+	// Apply ossutil path if set; empty means "auto".
+	if strings.TrimSpace(settings.OssutilPath) == "" {
+		s.ossutilPath = s.defaultOssutilPath
+	} else {
 		s.ossutilPath = settings.OssutilPath
 	}
 
@@ -598,8 +656,10 @@ func (s *OSSService) SaveSettings(settings AppSettings) error {
 		return err
 	}
 
-	// Apply ossutil path immediately
-	if settings.OssutilPath != "" {
+	// Apply ossutil path immediately; empty means "auto".
+	if strings.TrimSpace(settings.OssutilPath) == "" {
+		s.ossutilPath = s.defaultOssutilPath
+	} else {
 		s.ossutilPath = settings.OssutilPath
 	}
 
