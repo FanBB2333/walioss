@@ -1,6 +1,6 @@
 .settings-container {
     min-height: 100vh;
-    background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+    background: linear-gradient(135deg, #4a5f6f 0%, #5a7080 50%, #6a8595 100%);
     padding: 40px;
     padding-top: 60px;
     /* Space for macOS titlebar */
@@ -81,8 +81,8 @@
 
 .form-input:focus {
     outline: none;
-    border-color: rgba(79, 172, 254, 0.5);
-    box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+    border-color: rgba(126, 184, 219, 0.6);
+    box-shadow: 0 0 0 3px rgba(126, 184, 219, 0.15);
 }
 
 .form-input::placeholder {
@@ -111,18 +111,18 @@
 }
 
 .theme-option.active {
-    border-color: #4facfe;
-    background: rgba(79, 172, 254, 0.1);
+    border-color: #7eb8db;
+    background: rgba(126, 184, 219, 0.15);
     color: #ffffff;
 }
 
 .save-btn {
     width: 100%;
     padding: 14px;
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: linear-gradient(135deg, #7eb8db 0%, #9acfe5 100%);
     border: none;
     border-radius: 10px;
-    color: #0f0c29;
+    color: #2a3f4f;
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
@@ -131,7 +131,7 @@
 
 .save-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px -6px rgba(79, 172, 254, 0.4);
+    box-shadow: 0 8px 20px -6px rgba(126, 184, 219, 0.4);
 }
 
 .save-btn:disabled {

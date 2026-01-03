@@ -14,7 +14,7 @@ body,
 }
 
 body {
-    background: #1a1a2e;
+    background: #3a4f5f;
     color: #ffffff;
 }
 
@@ -34,7 +34,7 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    background: linear-gradient(135deg, #4a5f6f 0%, #5a7080 50%, #6a8595 100%);
 }
 
 .dashboard-header {
@@ -52,7 +52,7 @@ body {
 .dashboard-header h1 {
     font-size: 22px;
     font-weight: 700;
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: linear-gradient(135deg, #7eb8db 0%, #9acfe5 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
