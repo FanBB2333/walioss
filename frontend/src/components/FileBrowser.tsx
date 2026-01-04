@@ -432,16 +432,36 @@ function FileBrowser({ config, profileName, onTransferStart, onTransferFinish }:
 
   const renderBreadcrumbs = () => {
     const crumbs = [];
+    const isRootActive = !currentBucket;
     crumbs.push(
-      <span key="root" className={`crumb ${!currentBucket ? 'active' : ''}`} onClick={() => handleBreadcrumbClick(-1)}>
+      <span 
+        key="root" 
+        className={`crumb ${isRootActive ? 'active' : ''}`} 
+        onClick={(e) => {
+          if (!isRootActive) {
+            e.stopPropagation();
+            handleBreadcrumbClick(-1);
+          }
+        }}
+      >
         All Buckets
       </span>
     );
 
     if (currentBucket) {
       crumbs.push(<span key="sep-root" className="separator">/</span>);
+      const isBucketActive = !currentPrefix;
       crumbs.push(
-        <span key="bucket" className={`crumb ${!currentPrefix ? 'active' : ''}`} onClick={() => handleBreadcrumbClick(0)}>
+        <span 
+          key="bucket" 
+          className={`crumb ${isBucketActive ? 'active' : ''}`} 
+          onClick={(e) => {
+            if (!isBucketActive) {
+              e.stopPropagation();
+              handleBreadcrumbClick(0);
+            }
+          }}
+        >
           {currentBucket}
         </span>
       );
@@ -455,7 +475,12 @@ function FileBrowser({ config, profileName, onTransferStart, onTransferFinish }:
             <span 
                 key={`part-${index}`} 
                 className={`crumb ${isLast ? 'active' : ''}`}
-                onClick={() => !isLast && handleBreadcrumbClick(index + 1)}
+                onClick={(e) => {
+                  if (!isLast) {
+                    e.stopPropagation();
+                    handleBreadcrumbClick(index + 1);
+                  }
+                }}
             >
               {part}
             </span>
