@@ -5,6 +5,7 @@ import Settings from './pages/Settings';
 import FileBrowser from './components/FileBrowser';
 import { main } from '../wailsjs/go/models';
 import { GetSettings } from '../wailsjs/go/main/OSSService';
+import { OpenInFinder } from '../wailsjs/go/main/App';
 
 type GlobalView = 'session' | 'settings';
 
@@ -24,6 +25,7 @@ type TransferItem = {
   key: string;
   status: TransferStatus;
   message?: string;
+  localPath?: string;
 };
 
 function App() {
@@ -264,29 +266,54 @@ function App() {
                   ⇅
                   {inProgressCount > 0 && <span className="transfer-badge">{inProgressCount}</span>}
                 </button>
-                {showTransfers && (
+              {showTransfers && (
                   <div className="transfer-panel">
-                    <h4>传输队列</h4>
+                    <h4>Transfers</h4>
                     {transfers.length === 0 ? (
-                      <div className="transfer-empty">暂无传输</div>
+                      <div className="transfer-empty">No transfers</div>
                     ) : (
-                      <div className="transfer-list">
-                        {transfers.map((t) => (
-                          <div key={t.id} className="transfer-item">
-                            <div className="transfer-top">
-                              <span>{t.type === 'upload' ? '↑ 上传' : '↓ 下载'} · {t.name}</span>
-                              <span className={`status-pill ${t.status}`}>
-                                {t.status === 'in-progress' && '进行中'}
-                                {t.status === 'success' && '完成'}
-                                {t.status === 'error' && '失败'}
-                              </span>
-                            </div>
-                            <div className="transfer-meta">
-                              {t.bucket}/{t.key}
-                              {t.message && ` · ${t.message}`}
+                      <div className="transfer-sections">
+                        {/* Downloads Section */}
+                        {transfers.filter(t => t.type === 'download').length > 0 && (
+                          <div className="transfer-section">
+                            <div className="transfer-section-title">Downloads</div>
+                            <div className="transfer-list">
+                              {transfers.filter(t => t.type === 'download').map((t) => (
+                                <div key={t.id} className="transfer-item compact">
+                                  <div className="transfer-row">
+                                    <span className="transfer-name" title={t.name}>{t.name}</span>
+                                    <span className={`status-dot ${t.status}`} />
+                                    {t.status === 'success' && t.localPath && (
+                                      <button 
+                                        className="open-folder-btn" 
+                                        onClick={() => OpenInFinder(t.localPath!)}
+                                        title="Open in Finder"
+                                      >
+                                        Open
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        ))}
+                        )}
+                        {/* Uploads Section */}
+                        {transfers.filter(t => t.type === 'upload').length > 0 && (
+                          <div className="transfer-section">
+                            <div className="transfer-section-title">Uploads</div>
+                            <div className="transfer-list">
+                              {transfers.filter(t => t.type === 'upload').map((t) => (
+                                <div key={t.id} className="transfer-item compact">
+                                  <div className="transfer-row">
+                                    <span className="transfer-name" title={t.name}>{t.name}</span>
+                                    <span className={`status-dot ${t.status}`} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

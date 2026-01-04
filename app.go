@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os/exec"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -45,4 +46,9 @@ func (a *App) SelectSaveFile(filename string) (string, error) {
 		DefaultFilename:      filename,
 		CanCreateDirectories: true,
 	})
+}
+
+// OpenInFinder opens the containing folder in Finder (macOS)
+func (a *App) OpenInFinder(filePath string) error {
+	return exec.Command("open", "-R", filePath).Start()
 }

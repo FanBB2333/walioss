@@ -11,7 +11,7 @@ type TransferStatus = 'in-progress' | 'success' | 'error';
 interface FileBrowserProps {
   config: main.OSSConfig;
   profileName: string | null;
-  onTransferStart?: (payload: { name: string; type: 'upload' | 'download'; bucket: string; key: string; status?: TransferStatus }) => string;
+  onTransferStart?: (payload: { name: string; type: 'upload' | 'download'; bucket: string; key: string; status?: TransferStatus; localPath?: string }) => string;
   onTransferFinish?: (id: string, status: TransferStatus, message?: string) => void;
 }
 
@@ -323,6 +323,7 @@ function FileBrowser({ config, profileName, onTransferStart, onTransferFinish }:
         type: 'download',
         bucket: currentBucket,
         key: fullKey,
+        localPath: savePath,
       });
       // We pass the relative path (obj.name) if it's in root, but obj.name is just display name?
       // Wait, ListObjects returns Name as display name.

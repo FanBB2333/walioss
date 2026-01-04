@@ -269,9 +269,23 @@ body {
 .transfer-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
     max-height: 290px;
     overflow-y: auto;
+}
+
+.transfer-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.transfer-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 4px;
 }
 
 .transfer-item {
@@ -279,6 +293,74 @@ body {
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.transfer-item.compact {
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.transfer-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.transfer-name {
+    flex: 1;
+    font-size: 12px;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-dot.in-progress {
+    background: #4facfe;
+    animation: pulse 1.5s infinite;
+}
+
+.status-dot.success {
+    background: #4ade80;
+}
+
+.status-dot.error {
+    background: #f87171;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.open-folder-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.open-folder-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
 }
 
 .transfer-top {
@@ -556,4 +638,23 @@ body.theme-light .transfer-top {
 
 body.theme-light .transfer-meta {
     color: rgba(15, 23, 42, 0.6);
+}
+
+body.theme-light .transfer-section-title {
+    color: rgba(15, 23, 42, 0.5);
+}
+
+body.theme-light .transfer-name {
+    color: #0f172a;
+}
+
+body.theme-light .open-folder-btn {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    color: rgba(15, 23, 42, 0.8);
+}
+
+body.theme-light .open-folder-btn:hover {
+    background: rgba(15, 23, 42, 0.08);
+    color: #0f172a;
 }

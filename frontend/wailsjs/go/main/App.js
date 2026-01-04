@@ -6,6 +6,10 @@ export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }
 
+export function OpenInFinder(arg1) {
+  return window['go']['main']['App']['OpenInFinder'](arg1);
+}
+
 export function SelectFile() {
   return window['go']['main']['App']['SelectFile']();
 }
