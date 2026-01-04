@@ -404,9 +404,6 @@ func (s *OSSService) ListObjects(config OSSConfig, bucketName string, prefix str
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	// Use directory mode to simulate folder structure
-	args = append(args, "-d")
-
 	output, err := s.runOssutil(args...)
 
 	if err != nil {
@@ -416,10 +413,11 @@ func (s *OSSService) ListObjects(config OSSConfig, bucketName string, prefix str
 	return s.parseObjectList(string(output), bucketName, prefix), nil
 }
 
-// parseObjectList parses ossutil ls output
+// parseObjectList parses ossutil ls output and simulates folder navigation
 func (s *OSSService) parseObjectList(output string, bucketName string, prefix string) []ObjectInfo {
 	var objects []ObjectInfo
 	lines := strings.Split(output, "\n")
+	seenFolders := make(map[string]bool)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -427,90 +425,85 @@ func (s *OSSService) parseObjectList(output string, bucketName string, prefix st
 			continue
 		}
 
-		// Handle directory lines (usually end with /)
-		// Output format differs for directories and files
-		if strings.HasPrefix(line, "oss://") {
-			path := line
-			// Only treat as folder if path ends with /
-			// Files in OSS don't end with /
-			if !strings.HasSuffix(path, "/") {
-				// This is a file without metadata (unusual but possible)
-				name := strings.TrimPrefix(path, fmt.Sprintf("oss://%s/", bucketName))
-				displayName := strings.TrimPrefix(name, prefix)
-				if displayName == "" {
-					continue
-				}
-				objects = append(objects, ObjectInfo{
-					Name: displayName,
-					Path: path,
-					Type: "File",
-				})
-				continue
-			}
-
-			// It's a directory/common prefix
-			name := strings.TrimPrefix(path, fmt.Sprintf("oss://%s/", bucketName))
-			name = strings.TrimSuffix(name, "/")
-			// Get the last part of the path
-			parts := strings.Split(name, "/")
-			displayName := parts[len(parts)-1]
-			if displayName == "" {
-				continue // Skip the prefix itself if it matches
-			}
-
-			objects = append(objects, ObjectInfo{
-				Name: displayName,
-				Path: path,
-				Type: "Folder",
-			})
+		// Parse file lines with metadata
+		// Format: LastModifiedTime Size(B) StorageClass ETAG ObjectName
+		// Example: 2023-01-01 12:00:00 1234567 Standard D41D8CD98F oss://bucket/path/file.mp4
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
 			continue
 		}
 
-		// Handle file lines
-		// Format: LastModifiedTime Size(B) StorageClass ETAG ObjectName
-		fields := strings.Fields(line)
-		if len(fields) >= 5 {
-			// Check if it looks like a file line
-			// fields[0] + fields[1] might be date time
-			// Let's rely on the fact that ObjectName starts with oss:// which is the last field
-			objectPath := fields[len(fields)-1]
-			if strings.HasPrefix(objectPath, "oss://") {
-				// Parse standard output
-				// 2023-01-01 12:00:00 1234 Standard ETAG oss://...
+		objectPath := fields[len(fields)-1]
+		if !strings.HasPrefix(objectPath, "oss://") {
+			continue
+		}
 
-				// Extract size (index 2 usually, connecting date/time)
-				// Date: 0, Time: 1, Size: 2, StorageClass: 3, Etag: 4, Name: 5
-				// Wait, fields might vary. Let's look for the oss:// part.
+		// Extract full key relative to bucket
+		fullKey := strings.TrimPrefix(objectPath, fmt.Sprintf("oss://%s/", bucketName))
 
-				sizeStr := fields[2]
-				var size int64
-				fmt.Sscanf(sizeStr, "%d", &size)
+		// Skip if this is before our prefix
+		if !strings.HasPrefix(fullKey, prefix) && fullKey+"/" != prefix {
+			continue
+		}
 
-				lastModified := fields[0] + " " + fields[1]
-				storageClass := fields[3]
+		// Get the part after our prefix
+		relativePath := strings.TrimPrefix(fullKey, prefix)
+		if relativePath == "" {
+			continue // Skip the prefix folder itself
+		}
 
-				name := strings.TrimPrefix(objectPath, fmt.Sprintf("oss://%s/", bucketName))
+		// Check if this is a direct child or a nested item
+		slashIdx := strings.Index(relativePath, "/")
 
-				// If prefix is "dir/", name might be "dir/file.txt".
-				// We want just "file.txt" if we are simulating folders.
-				// But ossutil ls -d only shows immediate children?
-				// ossutil ls -d oss://bucket/dir/ show objects under dir/ and subdirs as prefixes.
-				// Objects will return full key.
+		if slashIdx != -1 {
+			// This is inside a subfolder - extract the folder name
+			folderName := relativePath[:slashIdx]
+			if folderName == "" {
+				continue
+			}
 
-				displayName := strings.TrimPrefix(name, prefix)
-				if displayName == "" {
-					continue // Skip the folder object itself
-				}
-
+			// Only add folder once
+			if !seenFolders[folderName] {
+				seenFolders[folderName] = true
 				objects = append(objects, ObjectInfo{
-					Name:         displayName,
-					Path:         objectPath,
-					Size:         size,
-					Type:         "File",
-					LastModified: lastModified,
-					StorageClass: storageClass,
+					Name: folderName,
+					Path: fmt.Sprintf("oss://%s/%s%s/", bucketName, prefix, folderName),
+					Type: "Folder",
 				})
 			}
+		} else {
+			// This is a direct child file
+			// Parse metadata - find oss:// path position to determine field layout
+			// Format may include timezone: 2023-01-01 12:00:00 +0800 1234567 Standard ETAG oss://...
+			// Or without: 2023-01-01 12:00:00 1234567 Standard ETAG oss://...
+			ossPathIdx := len(fields) - 1
+
+			var size int64
+			var lastModified, storageClass string
+
+			// Work backwards from oss:// path
+			// fields[ossPathIdx] = oss://path
+			// fields[ossPathIdx-1] = ETAG
+			// fields[ossPathIdx-2] = StorageClass
+			// fields[ossPathIdx-3] = Size
+			if ossPathIdx >= 4 {
+				fmt.Sscanf(fields[ossPathIdx-3], "%d", &size)
+				storageClass = fields[ossPathIdx-2]
+			}
+
+			// Date and time are always the first two fields
+			if len(fields) >= 2 {
+				lastModified = fields[0] + " " + fields[1]
+			}
+
+			objects = append(objects, ObjectInfo{
+				Name:         relativePath,
+				Path:         objectPath,
+				Size:         size,
+				Type:         "File",
+				LastModified: lastModified,
+				StorageClass: storageClass,
+			})
 		}
 	}
 
