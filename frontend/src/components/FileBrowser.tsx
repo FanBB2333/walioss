@@ -398,7 +398,14 @@ function FileBrowser({ config, profileName, onTransferStart, onTransferFinish }:
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const isFolder = (obj: main.ObjectInfo) => obj.type === 'Folder' || obj.path.endsWith('/') || obj.name.endsWith('/');
+  const isFolder = (obj: main.ObjectInfo) => {
+    // If explicitly marked as File, it's not a folder
+    if (obj.type === 'File') return false;
+    // If explicitly marked as Folder, it is a folder
+    if (obj.type === 'Folder') return true;
+    // Fallback: check if path/name ends with /
+    return obj.path.endsWith('/') || obj.name.endsWith('/');
+  };
 
   const guessType = (name: string, fallback: string) => {
     const ext = name.split('.').pop()?.toLowerCase() || '';

@@ -430,8 +430,25 @@ func (s *OSSService) parseObjectList(output string, bucketName string, prefix st
 		// Handle directory lines (usually end with /)
 		// Output format differs for directories and files
 		if strings.HasPrefix(line, "oss://") {
-			// It's a directory/common prefix usually if using -d
 			path := line
+			// Only treat as folder if path ends with /
+			// Files in OSS don't end with /
+			if !strings.HasSuffix(path, "/") {
+				// This is a file without metadata (unusual but possible)
+				name := strings.TrimPrefix(path, fmt.Sprintf("oss://%s/", bucketName))
+				displayName := strings.TrimPrefix(name, prefix)
+				if displayName == "" {
+					continue
+				}
+				objects = append(objects, ObjectInfo{
+					Name: displayName,
+					Path: path,
+					Type: "File",
+				})
+				continue
+			}
+
+			// It's a directory/common prefix
 			name := strings.TrimPrefix(path, fmt.Sprintf("oss://%s/", bucketName))
 			name = strings.TrimSuffix(name, "/")
 			// Get the last part of the path
