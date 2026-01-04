@@ -10,66 +10,56 @@
 }
 
 .bookmark-bar {
-    padding: 12px 24px 4px;
+    padding: 8px 24px;
     background: rgba(255, 255, 255, 0.04);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
 }
 
-.bookmark-actions {
+.bookmark-star-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 4px;
     display: flex;
     align-items: center;
-    gap: 10px;
-}
-
-.bookmark-title {
-    font-size: 13px;
-    letter-spacing: 0.3px;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.bookmark-btn {
-    background: rgba(79, 172, 254, 0.15);
-    border: 1px solid rgba(79, 172, 254, 0.35);
-    color: #7dd3fc;
-    border-radius: 8px;
-    padding: 6px 10px;
-    cursor: pointer;
+    justify-content: center;
     transition: all 0.2s;
+    flex-shrink: 0;
 }
 
-.bookmark-btn:disabled {
-    opacity: 0.4;
+.bookmark-star-btn:not(:disabled):hover {
+    color: #fbbf24;
+    transform: scale(1.1);
+}
+
+.bookmark-star-btn:disabled {
+    opacity: 0.3;
     cursor: not-allowed;
-}
-
-.bookmark-btn:not(:disabled):hover {
-    background: rgba(79, 172, 254, 0.25);
-    color: #bfe7ff;
-}
-
-.bookmark-hint {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
 }
 
 .bookmark-list {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
-    min-height: 30px;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: thin;
 }
 
 .bookmark-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    padding: 6px 8px;
+    border-radius: 6px;
+    padding: 4px 8px;
+    flex-shrink: 0;
 }
 
 .bookmark-chip-label {
@@ -77,7 +67,8 @@
     border: none;
     color: #ffffff;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 .bookmark-chip-label:hover {
@@ -85,26 +76,27 @@
 }
 
 .bookmark-chip-remove {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.7);
-    border-radius: 6px;
-    width: 20px;
-    height: 20px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    width: 16px;
+    height: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
 }
 
 .bookmark-chip-remove:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
+    color: #f87171;
 }
 
 .bookmark-empty {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 /* Browser Header */
@@ -464,18 +456,12 @@ body.theme-light .file-browser .bookmark-bar {
     border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-body.theme-light .file-browser .bookmark-title {
-    color: rgba(15, 23, 42, 0.65);
+body.theme-light .file-browser .bookmark-star-btn {
+    color: rgba(15, 23, 42, 0.45);
 }
 
-body.theme-light .file-browser .bookmark-btn {
-    background: rgba(79, 172, 254, 0.15);
-    border: 1px solid rgba(79, 172, 254, 0.35);
-    color: #0369a1;
-}
-
-body.theme-light .file-browser .bookmark-hint {
-    color: rgba(15, 23, 42, 0.5);
+body.theme-light .file-browser .bookmark-star-btn:not(:disabled):hover {
+    color: #f59e0b;
 }
 
 body.theme-light .file-browser .bookmark-chip {
@@ -488,11 +474,13 @@ body.theme-light .file-browser .bookmark-chip-label {
 }
 
 body.theme-light .file-browser .bookmark-chip-remove {
-    background: rgba(15, 23, 42, 0.04);
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    color: rgba(15, 23, 42, 0.65);
+    color: rgba(15, 23, 42, 0.45);
+}
+
+body.theme-light .file-browser .bookmark-chip-remove:hover {
+    color: #dc2626;
 }
 
 body.theme-light .file-browser .bookmark-empty {
-    color: rgba(15, 23, 42, 0.5);
+    color: rgba(15, 23, 42, 0.45);
 }

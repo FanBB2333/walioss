@@ -385,21 +385,19 @@ function FileBrowser({ config, profileName, onTransferStart, onTransferFinish }:
   return (
     <div className="file-browser">
       <div className="bookmark-bar">
-        <div className="bookmark-actions">
-          <div className="bookmark-title">Bookmarks</div>
-          <button
-            className="bookmark-btn"
-            onClick={handleAddBookmark}
-            disabled={!currentBucket || !profileName}
-            title={profileName ? 'Save current path' : 'Save connection as profile to enable bookmarks'}
-          >
-            + Add
-          </button>
-          {!profileName && <span className="bookmark-hint">保存书签需要已保存的配置</span>}
-        </div>
+        <button
+          className="bookmark-star-btn"
+          onClick={handleAddBookmark}
+          disabled={!currentBucket || !profileName}
+          title={profileName ? 'Add current path to bookmarks' : 'Save connection as profile to enable bookmarks'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+        </button>
         <div className="bookmark-list">
           {bookmarks.length === 0 ? (
-            <span className="bookmark-empty">No bookmarks yet</span>
+            <span className="bookmark-empty">No bookmarks</span>
           ) : (
             bookmarks.map((bm) => (
               <div key={bm.id} className="bookmark-chip">
