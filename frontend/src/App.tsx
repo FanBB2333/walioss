@@ -337,6 +337,7 @@ function App() {
                   <FileBrowser
                     config={sessionConfig}
                     profileName={sessionProfileName}
+                    initialPath={sessionConfig.defaultPath}
                     onTransferStart={startTransfer}
                     onTransferFinish={finishTransfer}
                   />

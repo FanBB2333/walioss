@@ -12,6 +12,7 @@ function Login({ onLoginSuccess }: LoginProps) {
   const [accessKeySecret, setAccessKeySecret] = useState('');
   const [region, setRegion] = useState('cn-hangzhou');
   const [endpoint, setEndpoint] = useState('');
+  const [defaultPath, setDefaultPath] = useState('');
   
   const [profiles, setProfiles] = useState<main.OSSProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState('');
@@ -59,6 +60,7 @@ function Login({ onLoginSuccess }: LoginProps) {
     setAccessKeySecret(profile.config.accessKeySecret);
     setRegion(profile.config.region);
     setEndpoint(profile.config.endpoint || '');
+    setDefaultPath(profile.config.defaultPath || '');
   };
 
   const handleProfileChange = (profileName: string) => {
@@ -72,6 +74,7 @@ function Login({ onLoginSuccess }: LoginProps) {
       setAccessKeySecret('');
       setRegion('cn-hangzhou');
       setEndpoint('');
+      setDefaultPath('');
     }
   };
 
@@ -90,6 +93,7 @@ function Login({ onLoginSuccess }: LoginProps) {
         accessKeySecret,
         region,
         endpoint,
+        defaultPath,
       };
 
       const result = await TestConnection(config);
@@ -120,6 +124,7 @@ function Login({ onLoginSuccess }: LoginProps) {
         accessKeySecret,
         region,
         endpoint,
+        defaultPath,
       };
 
       // Test connection first
@@ -230,6 +235,20 @@ function Login({ onLoginSuccess }: LoginProps) {
                   Leave Endpoint empty or use a service endpoint like <code>oss-cn-hangzhou.aliyuncs.com</code>.
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Default Path</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="oss://bucket/prefix/ (optional)"
+              value={defaultPath}
+              onChange={(e) => setDefaultPath(e.target.value)}
+            />
+            <div className="form-hint" style={{ marginTop: '6px', opacity: 0.7, fontSize: '12px' }}>
+              For accounts without list-all-buckets permission, enter a path like <code>oss://bucket/folder/</code> to open directly after login.
             </div>
           </div>
 

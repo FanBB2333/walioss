@@ -6,6 +6,7 @@ type OSSConfig struct {
 	AccessKeySecret string `json:"accessKeySecret"`
 	Region          string `json:"region"`
 	Endpoint        string `json:"endpoint"`
+	DefaultPath     string `json:"defaultPath"`
 }
 
 // OSSProfile represents a saved OSS profile

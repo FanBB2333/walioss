@@ -11,6 +11,7 @@ type TransferStatus = 'in-progress' | 'success' | 'error';
 interface FileBrowserProps {
   config: main.OSSConfig;
   profileName: string | null;
+  initialPath?: string;
   onTransferStart?: (payload: { name: string; type: 'upload' | 'download'; bucket: string; key: string; status?: TransferStatus; localPath?: string }) => string;
   onTransferFinish?: (id: string, status: TransferStatus, message?: string) => void;
 }
@@ -29,7 +30,7 @@ interface ContextMenuState {
   object: main.ObjectInfo | null;
 }
 
-function FileBrowser({ config, profileName, onTransferStart, onTransferFinish }: FileBrowserProps) {
+function FileBrowser({ config, profileName, initialPath, onTransferStart, onTransferFinish }: FileBrowserProps) {
   const [currentBucket, setCurrentBucket] = useState('');
   const [currentPrefix, setCurrentPrefix] = useState('');
   
@@ -73,9 +74,13 @@ function FileBrowser({ config, profileName, onTransferStart, onTransferFinish }:
     localStorage.setItem(storageKey, JSON.stringify(items));
   };
 
-  // Load buckets on mount
+  // Load initial path or buckets on mount
   useEffect(() => {
-    loadBuckets();
+    if (initialPath) {
+      parseAndNavigateOssPath(initialPath);
+    } else {
+      loadBuckets();
+    }
   }, [config]); 
 
   useEffect(() => {
