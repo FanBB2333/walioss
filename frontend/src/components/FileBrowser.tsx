@@ -1,20 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { main } from '../../wailsjs/go/models';
-import { ListBuckets, ListObjects, UploadFile, DownloadFile, DeleteObject } from '../../wailsjs/go/main/OSSService';
+import { DeleteObject, EnqueueDownload, EnqueueUpload, ListBuckets, ListObjects } from '../../wailsjs/go/main/OSSService';
 import { SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
 import ConfirmationModal from './ConfirmationModal';
 import FilePreviewModal from './FilePreviewModal';
+import { EventsOn } from '../../wailsjs/runtime/runtime';
 import './FileBrowser.css';
 import './Modal.css';
-
-type TransferStatus = 'in-progress' | 'success' | 'error';
 
 interface FileBrowserProps {
   config: main.OSSConfig;
   profileName: string | null;
   initialPath?: string;
-  onTransferStart?: (payload: { name: string; type: 'upload' | 'download'; bucket: string; key: string; status?: TransferStatus; localPath?: string }) => string;
-  onTransferFinish?: (id: string, status: TransferStatus, message?: string) => void;
 }
 
 type Bookmark = {
@@ -31,7 +28,7 @@ interface ContextMenuState {
   object: main.ObjectInfo | null;
 }
 
-function FileBrowser({ config, profileName, initialPath, onTransferStart, onTransferFinish }: FileBrowserProps) {
+function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
   const [currentBucket, setCurrentBucket] = useState('');
   const [currentPrefix, setCurrentPrefix] = useState('');
   
@@ -59,6 +56,15 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
   const addressInputRef = useRef<HTMLInputElement>(null);
 
   const storageKey = profileName ? `oss-bookmarks:${profileName}` : null;
+
+  const normalizeBucketName = (bucket: string) => bucket.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+
+  const normalizePrefix = (prefix: string) => {
+    let p = prefix.trim().replace(/^\/+/, '');
+    if (!p) return '';
+    if (!p.endsWith('/')) p += '/';
+    return p;
+  };
 
   const loadBookmarks = () => {
     if (!storageKey) {
@@ -100,6 +106,18 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
     setPreviewObject(null);
   }, [currentBucket, currentPrefix]);
 
+  useEffect(() => {
+    if (!currentBucket) return;
+    const off = EventsOn('transfer:update', (payload: any) => {
+      const update = payload as any;
+      if (update?.type !== 'upload' || update?.status !== 'success') return;
+      if (update?.bucket !== currentBucket) return;
+      if (typeof update?.key === 'string' && !update.key.startsWith(currentPrefix)) return;
+      loadObjects(currentBucket, currentPrefix);
+    });
+    return () => off();
+  }, [config, currentBucket, currentPrefix]);
+
   // Close menus on click elsewhere
   useEffect(() => {
     const handleClick = () => {
@@ -137,9 +155,10 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
   };
 
   const handleBucketClick = (bucketName: string) => {
-    setCurrentBucket(bucketName);
+    const normalizedBucket = normalizeBucketName(bucketName);
+    setCurrentBucket(normalizedBucket);
     setCurrentPrefix('');
-    loadObjects(bucketName, '');
+    loadObjects(normalizedBucket, '');
   };
 
   const handleFolderClick = (folderName: string) => {
@@ -195,9 +214,11 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
 
   // Generate current OSS path
   const getCurrentOssPath = () => {
-    if (!currentBucket) return 'oss://';
-    if (!currentPrefix) return `oss://${currentBucket}/`;
-    return `oss://${currentBucket}/${currentPrefix}`;
+    const bucket = normalizeBucketName(currentBucket);
+    const prefix = normalizePrefix(currentPrefix);
+    if (!bucket) return 'oss://';
+    if (!prefix) return `oss://${bucket}/`;
+    return `oss://${bucket}/${prefix}`;
   };
 
   // Parse OSS path and navigate
@@ -209,6 +230,7 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
     if (pathToParse.startsWith('oss://')) {
       pathToParse = pathToParse.substring(6);
     }
+    pathToParse = pathToParse.replace(/^\/+/, '');
     
     // If empty, go to bucket list
     if (!pathToParse || pathToParse === '/') {
@@ -220,9 +242,16 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
     
     // Split into bucket and prefix
     const parts = pathToParse.split('/');
-    const bucket = parts[0];
+    const bucket = normalizeBucketName(parts[0] || '');
     const prefix = parts.slice(1).filter(p => p).join('/');
-    const normalizedPrefix = prefix ? prefix + '/' : '';
+    const normalizedPrefix = normalizePrefix(prefix);
+
+    if (!bucket) {
+      setCurrentBucket('');
+      setCurrentPrefix('');
+      loadBuckets();
+      return;
+    }
     
     setCurrentBucket(bucket);
     setCurrentPrefix(normalizedPrefix);
@@ -286,9 +315,11 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
   };
 
   const handleBookmarkClick = (bookmark: Bookmark) => {
-    setCurrentBucket(bookmark.bucket);
-    setCurrentPrefix(bookmark.prefix);
-    loadObjects(bookmark.bucket, bookmark.prefix);
+    const bucket = normalizeBucketName(bookmark.bucket);
+    const prefix = normalizePrefix(bookmark.prefix);
+    setCurrentBucket(bucket);
+    setCurrentPrefix(prefix);
+    loadObjects(bucket, prefix);
   };
 
   const handleRemoveBookmark = (id: string) => {
@@ -318,73 +349,26 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
   };
 
   const handleUpload = async () => {
-    let transferId: string | undefined;
     try {
       const filePath = await SelectFile();
       if (!filePath) return;
-
-      const fileName = filePath.split(/[/\\]/).pop() || 'file';
-
-      setLoading(true); // Show global loading or toast
-      transferId = onTransferStart?.({
-        name: fileName,
-        type: 'upload',
-        bucket: currentBucket,
-        key: `${currentPrefix}${fileName}`,
-      });
-
-      await UploadFile(config, currentBucket, currentPrefix, filePath);
-      transferId && onTransferFinish?.(transferId, 'success');
-      await loadObjects(currentBucket, currentPrefix); // Refresh
+      await EnqueueUpload(config, currentBucket, currentPrefix, filePath);
     } catch (err: any) {
-      if (transferId) {
-        onTransferFinish?.(transferId, 'error', err?.message || 'Upload failed');
-      }
       setError(err?.message || "Upload failed");
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleDownload = async (target?: main.ObjectInfo) => {
-    let transferId: string | undefined;
     const obj = target || contextMenu.object;
     if (!obj || isFolder(obj) || !currentBucket) return;
 
     try {
       const savePath = await SelectSaveFile(obj.name);
       if (!savePath) return;
-
-      setOperationLoading(true);
       const fullKey = obj.path.substring(`oss://${currentBucket}/`.length);
-      transferId = onTransferStart?.({
-        name: obj.name,
-        type: 'download',
-        bucket: currentBucket,
-        key: fullKey,
-        localPath: savePath,
-      });
-      // We pass the relative path (obj.name) if it's in root, but obj.name is just display name?
-      // Wait, ListObjects returns Name as display name.
-      // We need the key relative to bucket.
-      // In ListObjects implementation:
-      // Name: displayName (e.g. "file.txt" inside "folder/")
-      // But we need "folder/file.txt" for download.
-      // Ah, wait. In `oss_service.go`, `DownloadFile` takes `object`.
-      // My `ListObjects` implementation returns `ObjectInfo` where `Name` is the display name (relative to prefix).
-      // But `Path` is full oss path "oss://bucket/prefix/name".
-      
-      // Let's rely on `Path` but trim `oss://bucket/`.
-
-      await DownloadFile(config, currentBucket, fullKey, savePath);
-      transferId && onTransferFinish?.(transferId, 'success');
+      await EnqueueDownload(config, currentBucket, fullKey, savePath, obj.size);
     } catch (err: any) {
-      if (transferId) {
-        onTransferFinish?.(transferId, 'error', err?.message || 'Download failed');
-      }
       alert("Download failed: " + err.message);
-    } finally {
-      setOperationLoading(false);
     }
   };
 
@@ -497,6 +481,7 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
     );
 
     if (currentBucket) {
+      const bucketDisplay = normalizeBucketName(currentBucket);
       const isBucketActive = !currentPrefix;
       crumbs.push(
         <span 
@@ -509,7 +494,7 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
             }
           }}
         >
-          {currentBucket}
+          {bucketDisplay}
         </span>
       );
 

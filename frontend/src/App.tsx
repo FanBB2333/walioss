@@ -3,9 +3,11 @@ import './App.css';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
 import FileBrowser from './components/FileBrowser';
+import TransferModal from './components/TransferModal';
 import { main } from '../wailsjs/go/models';
 import { GetSettings } from '../wailsjs/go/main/OSSService';
-import { OpenInFinder } from '../wailsjs/go/main/App';
+import { OpenFile, OpenInFinder } from '../wailsjs/go/main/App';
+import { EventsOn } from '../wailsjs/runtime/runtime';
 
 type GlobalView = 'session' | 'settings';
 
@@ -14,7 +16,7 @@ type AppTab = {
   title: string;
 };
 
-type TransferStatus = 'in-progress' | 'success' | 'error';
+type TransferStatus = 'queued' | 'in-progress' | 'success' | 'error';
 type TransferType = 'upload' | 'download';
 
 type TransferItem = {
@@ -26,6 +28,13 @@ type TransferItem = {
   status: TransferStatus;
   message?: string;
   localPath?: string;
+  totalBytes?: number;
+  doneBytes?: number;
+  speedBytesPerSec?: number;
+  etaSeconds?: number;
+  startedAtMs?: number;
+  updatedAtMs?: number;
+  finishedAtMs?: number;
 };
 
 function App() {
@@ -44,6 +53,7 @@ function App() {
   const [renameValue, setRenameValue] = useState<string>('');
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [showTransfers, setShowTransfers] = useState<boolean>(false);
+  const [transferView, setTransferView] = useState<TransferType>('download');
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
@@ -70,6 +80,43 @@ function App() {
       }
     };
     applySavedTheme();
+  }, []);
+
+  useEffect(() => {
+    const off = EventsOn('transfer:update', (payload: any) => {
+      const update = payload as any;
+      if (!update?.id) return;
+
+      setTransfers((prev) => {
+        const index = prev.findIndex((t) => t.id === update.id);
+        const next: TransferItem = {
+          id: update.id,
+          name: update.name || (index >= 0 ? prev[index].name : 'Transfer'),
+          type: update.type,
+          bucket: update.bucket,
+          key: update.key,
+          status: update.status,
+          message: update.message,
+          localPath: update.localPath,
+          totalBytes: update.totalBytes,
+          doneBytes: update.doneBytes,
+          speedBytesPerSec: update.speedBytesPerSec,
+          etaSeconds: update.etaSeconds,
+          startedAtMs: update.startedAtMs,
+          updatedAtMs: update.updatedAtMs,
+          finishedAtMs: update.finishedAtMs,
+        };
+
+        if (index === -1) {
+          return [next, ...prev];
+        }
+
+        const updated = [...prev];
+        updated[index] = { ...prev[index], ...next };
+        return updated;
+      });
+    });
+    return () => off();
   }, []);
 
   // Titlebar drag region for macOS
@@ -124,16 +171,6 @@ function App() {
     cancelRename();
   };
 
-  const startTransfer = (payload: Omit<TransferItem, 'id' | 'status'> & { status?: TransferStatus }) => {
-    const id = `tr-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    setTransfers((prev) => [{ ...payload, id, status: payload.status ?? 'in-progress' }, ...prev]);
-    return id;
-  };
-
-  const finishTransfer = (id: string, status: TransferStatus, message?: string) => {
-    setTransfers((prev) => prev.map((t) => (t.id === id ? { ...t, status, message } : t)));
-  };
-
   const closeTab = (tabId: string) => {
     if (tabs.length <= 1) {
       handleLogout();
@@ -184,7 +221,7 @@ function App() {
     };
   }, [activeTabId, tabs]);
 
-  const inProgressCount = transfers.filter((t) => t.status === 'in-progress').length;
+  const inProgressCount = transfers.filter((t) => t.status === 'in-progress' || t.status === 'queued').length;
 
   return (
     <>
@@ -202,68 +239,15 @@ function App() {
                   <button
                     className="transfer-btn"
                     type="button"
-                    onClick={() => setShowTransfers((v) => !v)}
+                    onClick={() => {
+                      setTransferView('download');
+                      setShowTransfers(true);
+                    }}
                     title="传输进度"
                   >
                     ⇅
                     {inProgressCount > 0 && <span className="transfer-badge">{inProgressCount}</span>}
                   </button>
-                  {showTransfers && (
-                    <div className="transfer-panel">
-                      <h4>Transfers</h4>
-                      {transfers.length === 0 ? (
-                        <div className="transfer-empty">No transfers</div>
-                      ) : (
-                        <div className="transfer-sections">
-                          {/* Downloads Section */}
-                          {transfers.filter((t) => t.type === 'download').length > 0 && (
-                            <div className="transfer-section">
-                              <div className="transfer-section-title">Downloads</div>
-                              <div className="transfer-list">
-                                {transfers
-                                  .filter((t) => t.type === 'download')
-                                  .map((t) => (
-                                    <div key={t.id} className="transfer-item compact">
-                                      <div className="transfer-row">
-                                        <span className="transfer-name" title={t.name}>
-                                          {t.name}
-                                        </span>
-                                        <span className={`status-dot ${t.status}`} />
-                                        {t.status === 'success' && t.localPath && (
-                                          <button className="open-folder-btn" onClick={() => OpenInFinder(t.localPath!)} title="Open in Finder">
-                                            Open
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                              </div>
-                            </div>
-                          )}
-                          {/* Uploads Section */}
-                          {transfers.filter((t) => t.type === 'upload').length > 0 && (
-                            <div className="transfer-section">
-                              <div className="transfer-section-title">Uploads</div>
-                              <div className="transfer-list">
-                                {transfers
-                                  .filter((t) => t.type === 'upload')
-                                  .map((t) => (
-                                    <div key={t.id} className="transfer-item compact">
-                                      <div className="transfer-row">
-                                        <span className="transfer-name" title={t.name}>
-                                          {t.name}
-                                        </span>
-                                        <span className={`status-dot ${t.status}`} />
-                                      </div>
-                                    </div>
-                                  ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
               <span>Region: {sessionConfig?.region || '-'}</span>
@@ -348,14 +332,21 @@ function App() {
                     config={sessionConfig}
                     profileName={sessionProfileName}
                     initialPath={sessionConfig.defaultPath}
-                    onTransferStart={startTransfer}
-                    onTransferFinish={finishTransfer}
                   />
                 </div>
               ))}
             </div>
           )}
         </main>
+        <TransferModal
+          isOpen={showTransfers}
+          activeTab={transferView}
+          onTabChange={setTransferView}
+          transfers={transfers}
+          onClose={() => setShowTransfers(false)}
+          onReveal={(p) => OpenInFinder(p)}
+          onOpen={(p) => OpenFile(p)}
+        />
       </div>
     </>
   );

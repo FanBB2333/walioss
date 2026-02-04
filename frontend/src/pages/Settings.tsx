@@ -14,6 +14,7 @@ function Settings({ onBack, onThemeChange }: SettingsProps) {
     defaultRegion: '',
     defaultEndpoint: '',
     theme: 'dark',
+    maxTransferThreads: 3,
   } as main.AppSettings);
   
   const [loading, setLoading] = useState(false);
@@ -159,6 +160,26 @@ function Settings({ onBack, onThemeChange }: SettingsProps) {
                 Light
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Transfers */}
+        <div className="settings-section">
+          <h2 className="section-title">Transfers</h2>
+          <div className="form-group">
+            <label className="form-label">Max Concurrent Transfers</label>
+            <input
+              type="number"
+              className="form-input"
+              value={settings.maxTransferThreads ?? 3}
+              min={1}
+              max={64}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                setSettings({ ...settings, maxTransferThreads: Number.isFinite(v) ? v : 1 });
+              }}
+              placeholder="e.g., 3"
+            />
           </div>
         </div>
 

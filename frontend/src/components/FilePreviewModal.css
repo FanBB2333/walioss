@@ -204,6 +204,72 @@
     border: 1px solid rgba(251, 191, 36, 0.2);
 }
 
+.preview-hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    padding: 0 2px;
+}
+
+.highlight-editor {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.highlight-editor:focus-within {
+    border-color: rgba(79, 172, 254, 0.45);
+    box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.12);
+}
+
+.highlight-layer {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    overflow: auto;
+    padding: 14px;
+    pointer-events: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre;
+    scrollbar-width: none;
+}
+
+.highlight-layer::-webkit-scrollbar {
+    display: none;
+}
+
+.highlight-layer code {
+    display: block;
+}
+
+.highlight-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    resize: none;
+    border: none;
+    background: transparent;
+    color: transparent;
+    caret-color: rgba(255, 255, 255, 0.95);
+    padding: 14px;
+    outline: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow: auto;
+    scrollbar-width: thin;
+}
+
+.highlight-input::selection {
+    background: rgba(79, 172, 254, 0.25);
+}
+
 .preview-code {
     flex: 1;
     min-height: 0;
@@ -278,12 +344,10 @@
 
 .token-keyword {
     color: #34d399;
-    font-weight: 600;
 }
 
 .token-comment {
     color: rgba(255, 255, 255, 0.45);
-    font-style: italic;
 }
 
 /* Theme (Light) */
@@ -348,11 +412,19 @@ body.theme-light .preview-empty {
     color: rgba(15, 23, 42, 0.6);
 }
 
+body.theme-light .preview-hint {
+    color: rgba(15, 23, 42, 0.55);
+}
+
 body.theme-light .preview-code,
-body.theme-light .text-editor {
+body.theme-light .highlight-editor {
     background: rgba(15, 23, 42, 0.03);
     border: 1px solid rgba(15, 23, 42, 0.08);
     color: rgba(15, 23, 42, 0.9);
+}
+
+body.theme-light .highlight-input {
+    caret-color: rgba(15, 23, 42, 0.95);
 }
 
 body.theme-light .preview-banner {

@@ -5,6 +5,7 @@ export namespace main {
 	    defaultRegion: string;
 	    defaultEndpoint: string;
 	    theme: string;
+	    maxTransferThreads: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -16,6 +17,7 @@ export namespace main {
 	        this.defaultRegion = source["defaultRegion"];
 	        this.defaultEndpoint = source["defaultEndpoint"];
 	        this.theme = source["theme"];
+	        this.maxTransferThreads = source["maxTransferThreads"];
 	    }
 	}
 	export class BucketInfo {

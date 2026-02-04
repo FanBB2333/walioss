@@ -18,6 +18,14 @@ export function DownloadFile(arg1, arg2, arg3, arg4) {
   return window['go']['main']['OSSService']['DownloadFile'](arg1, arg2, arg3, arg4);
 }
 
+export function EnqueueDownload(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['OSSService']['EnqueueDownload'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function EnqueueUpload(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['OSSService']['EnqueueUpload'](arg1, arg2, arg3, arg4);
+}
+
 export function GetDefaultProfile() {
   return window['go']['main']['OSSService']['GetDefaultProfile']();
 }
@@ -64,6 +72,10 @@ export function SaveProfile(arg1) {
 
 export function SaveSettings(arg1) {
   return window['go']['main']['OSSService']['SaveSettings'](arg1);
+}
+
+export function SetContext(arg1) {
+  return window['go']['main']['OSSService']['SetContext'](arg1);
 }
 
 export function SetOssutilPath(arg1) {

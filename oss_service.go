@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func normalizeRegion(region string) string {
@@ -60,6 +62,11 @@ type OSSService struct {
 	ossutilPath        string
 	defaultOssutilPath string
 	configDir          string
+	transferSeq        uint64
+	transferCtxMu      sync.RWMutex
+	transferCtx        context.Context
+	transferLimiterMu  sync.RWMutex
+	transferLimiter    *transferLimiter
 }
 
 // NewOSSService creates a new OSSService instance
@@ -100,6 +107,7 @@ func NewOSSService() *OSSService {
 		ossutilPath:        ossutilPath,
 		defaultOssutilPath: ossutilPath,
 		configDir:          filepath.Join(homeDir, ".walioss"),
+		transferLimiter:    newTransferLimiter(3),
 	}
 }
 
@@ -393,6 +401,7 @@ func (s *OSSService) parseBucketList(output string) []BucketInfo {
 			continue
 		}
 		name := strings.TrimPrefix(bucketURL, "oss://")
+		name = strings.Trim(name, "/")
 		if name == "" {
 			continue
 		}
@@ -765,8 +774,9 @@ func (s *OSSService) GetSettings() (AppSettings, error) {
 		if os.IsNotExist(err) {
 			// Return defaults
 			return AppSettings{
-				OssutilPath: "",
-				Theme:       "dark",
+				OssutilPath:        "",
+				Theme:              "dark",
+				MaxTransferThreads: 3,
 			}, nil
 		}
 		return AppSettings{}, err
@@ -777,12 +787,18 @@ func (s *OSSService) GetSettings() (AppSettings, error) {
 		return AppSettings{}, err
 	}
 
+	if settings.MaxTransferThreads <= 0 {
+		settings.MaxTransferThreads = 3
+	}
+
 	// Apply ossutil path if set; empty means "auto".
 	if strings.TrimSpace(settings.OssutilPath) == "" {
 		s.ossutilPath = s.defaultOssutilPath
 	} else {
 		s.ossutilPath = settings.OssutilPath
 	}
+
+	s.setMaxTransferThreads(settings.MaxTransferThreads)
 
 	return settings, nil
 }
@@ -793,12 +809,21 @@ func (s *OSSService) SaveSettings(settings AppSettings) error {
 		return err
 	}
 
+	if settings.MaxTransferThreads <= 0 {
+		settings.MaxTransferThreads = 3
+	}
+	if settings.MaxTransferThreads > 64 {
+		settings.MaxTransferThreads = 64
+	}
+
 	// Apply ossutil path immediately; empty means "auto".
 	if strings.TrimSpace(settings.OssutilPath) == "" {
 		s.ossutilPath = s.defaultOssutilPath
 	} else {
 		s.ossutilPath = settings.OssutilPath
 	}
+
+	s.setMaxTransferThreads(settings.MaxTransferThreads)
 
 	settingsPath := filepath.Join(s.configDir, "settings.json")
 	data, err := json.MarshalIndent(settings, "", "  ")

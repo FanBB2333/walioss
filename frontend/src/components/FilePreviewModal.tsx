@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { main } from '../../wailsjs/go/models';
 import { GetObjectText, PresignObject, PutObjectText } from '../../wailsjs/go/main/OSSService';
 import './FilePreviewModal.css';
@@ -221,6 +221,8 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   const [highlightHtml, setHighlightHtml] = useState<string>('');
   const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
   const [videoMeta, setVideoMeta] = useState<{ width: number; height: number; duration: number } | null>(null);
+  const highlightLayerRef = useRef<HTMLPreElement>(null);
+  const editorInputRef = useRef<HTMLTextAreaElement>(null);
 
   const fileKey = useMemo(() => {
     if (!object?.path || !bucket) return '';
@@ -298,8 +300,9 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   useEffect(() => {
     if (!isOpen || kind !== 'text') return;
     const timer = window.setTimeout(() => {
-      const slice = text.length > MAX_HIGHLIGHT_CHARS ? text.slice(0, MAX_HIGHLIGHT_CHARS) : text;
-      setHighlightHtml(highlightText(slice));
+      const head = text.slice(0, MAX_HIGHLIGHT_CHARS);
+      const tail = text.slice(MAX_HIGHLIGHT_CHARS);
+      setHighlightHtml(highlightText(head) + escapeHtml(tail));
     }, 150);
     return () => window.clearTimeout(timer);
   }, [isOpen, kind, text]);
@@ -388,13 +391,12 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
     }
 
     if (kind === 'text') {
-      const isHighlightTruncated = text.length > MAX_HIGHLIGHT_CHARS;
       if (!canEditText) {
         return (
           <div className="preview-text">
-            {(truncated || isHighlightTruncated) && (
+            {truncated && (
               <div className="preview-banner">
-                {truncated ? `Preview is truncated to ${formatBytes(MAX_TEXT_PREVIEW_BYTES)}.` : 'Syntax highlighting is truncated for performance.'}
+                Preview is truncated to {formatBytes(MAX_TEXT_PREVIEW_BYTES)}.
               </div>
             )}
             <pre className="preview-code">
@@ -405,31 +407,27 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
       }
 
       return (
-        <div className="preview-text split">
-          {truncated && (
-            <div className="preview-banner">
-              Preview is truncated to {formatBytes(MAX_TEXT_EDIT_BYTES)}.
-            </div>
-          )}
-          <div className="editor-split">
-            <div className="editor-pane">
-              <div className="pane-title">Edit</div>
-              <textarea
-                className="text-editor"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                spellCheck={false}
-              />
-            </div>
-            <div className="preview-pane">
-              <div className="pane-title">Highlight</div>
-              {text.length > MAX_HIGHLIGHT_CHARS && (
-                <div className="pane-hint">Showing first {formatBytes(MAX_HIGHLIGHT_CHARS)} for performance.</div>
-              )}
-              <pre className="preview-code">
-                <code dangerouslySetInnerHTML={{ __html: highlightHtml || escapeHtml(text) }} />
-              </pre>
-            </div>
+        <div className="preview-text">
+          {truncated && <div className="preview-banner">Preview is truncated to {formatBytes(MAX_TEXT_EDIT_BYTES)}.</div>}
+          {text.length > MAX_HIGHLIGHT_CHARS && <div className="preview-hint">Syntax highlighting is simplified after {formatBytes(MAX_HIGHLIGHT_CHARS)} for performance.</div>}
+          <div className="highlight-editor">
+            <pre ref={highlightLayerRef} className="highlight-layer" aria-hidden="true">
+              <code dangerouslySetInnerHTML={{ __html: highlightHtml || escapeHtml(text) }} />
+            </pre>
+            <textarea
+              ref={editorInputRef}
+              className="highlight-input"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onScroll={(e) => {
+                const pre = highlightLayerRef.current;
+                if (!pre) return;
+                pre.scrollTop = e.currentTarget.scrollTop;
+                pre.scrollLeft = e.currentTarget.scrollLeft;
+              }}
+              wrap="off"
+              spellCheck={false}
+            />
           </div>
         </div>
       );

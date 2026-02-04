@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	goruntime "runtime"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -25,6 +27,7 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.OSSService.SetContext(ctx)
 }
 
 // Greet returns a greeting for the given name
@@ -51,4 +54,21 @@ func (a *App) SelectSaveFile(filename string) (string, error) {
 // OpenInFinder opens the containing folder in Finder (macOS)
 func (a *App) OpenInFinder(filePath string) error {
 	return exec.Command("open", "-R", filePath).Start()
+}
+
+// OpenFile opens a local file using the OS default handler.
+func (a *App) OpenFile(filePath string) error {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return fmt.Errorf("file path is empty")
+	}
+
+	switch goruntime.GOOS {
+	case "darwin":
+		return exec.Command("open", filePath).Start()
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "", filePath).Start()
+	default:
+		return exec.Command("xdg-open", filePath).Start()
+	}
 }
