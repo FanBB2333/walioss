@@ -40,9 +40,9 @@ body {
 }
 
 .dashboard-header {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     padding: 16px 24px;
     padding-top: 40px;
     /* Space for macOS titlebar */
@@ -50,6 +50,22 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     flex-shrink: 0;
+}
+
+.dashboard-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
+}
+
+.dashboard-tabbar {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .app-brand {
@@ -78,7 +94,7 @@ body {
     align-items: center;
     justify-content: flex-start;
     gap: 6px;
-    padding: 0 10px;
+    padding: 0;
     overflow-x: auto;
     scrollbar-width: thin;
     min-width: 0;
@@ -96,11 +112,10 @@ body {
     color: rgba(255, 255, 255, 0.8);
     cursor: pointer;
     transition: all 0.2s ease;
-    flex-shrink: 0;
     user-select: none;
-    min-width: 130px;
-    max-width: 220px;
-    flex: 0 1 160px;
+    min-width: 96px;
+    max-width: 240px;
+    flex: 1 1 160px;
 }
 
 .window-tab-number {
@@ -502,6 +517,10 @@ body.theme-light .dashboard-container {
 body.theme-light .dashboard-header {
     background: rgba(255, 255, 255, 0.7);
     border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .dashboard-tabbar {
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 body.theme-light .app-name {

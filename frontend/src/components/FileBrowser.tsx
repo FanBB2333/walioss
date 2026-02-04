@@ -51,6 +51,7 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
   const [operationLoading, setOperationLoading] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewObject, setPreviewObject] = useState<main.ObjectInfo | null>(null);
+  const [bookmarkMenuOpen, setBookmarkMenuOpen] = useState(false);
 
   // Address bar edit state
   const [addressBarEditing, setAddressBarEditing] = useState(false);
@@ -91,16 +92,23 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
   }, [storageKey]);
 
   useEffect(() => {
+    setBookmarkMenuOpen(false);
+  }, [storageKey]);
+
+  useEffect(() => {
     setPreviewModalOpen(false);
     setPreviewObject(null);
   }, [currentBucket, currentPrefix]);
 
-  // Close context menu on click elsewhere
+  // Close menus on click elsewhere
   useEffect(() => {
-    const handleClick = () => setContextMenu({ ...contextMenu, visible: false });
+    const handleClick = () => {
+      setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      setBookmarkMenuOpen(false);
+    };
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, [contextMenu]);
+  }, []);
 
   const loadBuckets = async () => {
     setLoading(true);
@@ -267,6 +275,16 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
     });
   };
 
+  const currentPrefixNormalized = currentPrefix.endsWith('/') ? currentPrefix : currentPrefix + (currentPrefix ? '/' : '');
+  const isCurrentBookmarked = !!(profileName && currentBucket && bookmarks.some((b) => b.bucket === currentBucket && b.prefix === currentPrefixNormalized));
+
+  const handleToggleBookmarkMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!profileName) return;
+    setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+    setBookmarkMenuOpen((v) => !v);
+  };
+
   const handleBookmarkClick = (bookmark: Bookmark) => {
     setCurrentBucket(bookmark.bucket);
     setCurrentPrefix(bookmark.prefix);
@@ -296,7 +314,7 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
     if (!target || !currentBucket || isFolder(target)) return;
     setPreviewObject(target);
     setPreviewModalOpen(true);
-    setContextMenu({ ...contextMenu, visible: false });
+    setContextMenu((prev) => ({ ...prev, visible: false }));
   };
 
   const handleUpload = async () => {
@@ -522,36 +540,67 @@ function FileBrowser({ config, profileName, initialPath, onTransferStart, onTran
 
   return (
     <div className="file-browser">
-      <div className="bookmark-bar">
-        <button
-          className="bookmark-star-btn"
-          onClick={handleAddBookmark}
-          disabled={!currentBucket || !profileName}
-          title={profileName ? 'Add current path to bookmarks' : 'Save connection as profile to enable bookmarks'}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-          </svg>
-        </button>
-        <div className="bookmark-list">
-          {bookmarks.length === 0 ? (
-            <span className="bookmark-empty">No bookmarks</span>
-          ) : (
-            bookmarks.map((bm) => (
-              <div key={bm.id} className="bookmark-chip">
-                <button className="bookmark-chip-label" onClick={() => handleBookmarkClick(bm)} title={`${bm.bucket}/${bm.prefix}`}>
-                  {bm.label}
-                </button>
-                <button className="bookmark-chip-remove" onClick={() => handleRemoveBookmark(bm.id)} title="Remove bookmark">
-                  ×
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
       <div className="browser-header">
         <div className="nav-controls">
+          <div className="bookmark-toggle">
+            <button
+              className={`bookmark-icon-btn ${isCurrentBookmarked ? 'active' : ''}`}
+              onClick={handleAddBookmark}
+              disabled={!currentBucket || !profileName}
+              title={profileName ? (isCurrentBookmarked ? 'Bookmarked' : 'Add bookmark') : 'Save connection as profile to enable bookmarks'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+            </button>
+            <button
+              className="bookmark-icon-btn"
+              onClick={handleToggleBookmarkMenu}
+              disabled={!profileName}
+              title="Bookmarks"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
+              </svg>
+            </button>
+            {bookmarkMenuOpen && (
+              <div className="bookmark-popup" onClick={(e) => e.stopPropagation()}>
+                <div className="bookmark-popup-title">Bookmarks</div>
+                {bookmarks.length === 0 ? (
+                  <div className="bookmark-popup-empty">No bookmarks</div>
+                ) : (
+                  <div className="bookmark-popup-list">
+                    {bookmarks.map((bm) => (
+                      <div
+                        key={bm.id}
+                        className="bookmark-popup-item"
+                        onClick={() => {
+                          handleBookmarkClick(bm);
+                          setBookmarkMenuOpen(false);
+                        }}
+                        title={`oss://${bm.bucket}/${bm.prefix}`}
+                      >
+                        <div className="bookmark-popup-main">
+                          <div className="bookmark-popup-label">{bm.label}</div>
+                          <div className="bookmark-popup-path">{`oss://${bm.bucket}/${bm.prefix}`}</div>
+                        </div>
+                        <button
+                          className="bookmark-popup-remove"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveBookmark(bm.id);
+                          }}
+                          title="Remove bookmark"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <button className="nav-btn" onClick={handleBack} disabled={!currentBucket} title="Go Back">←</button>
           <button className="nav-btn" onClick={handleRefresh} disabled={loading} title="Refresh">↻</button>
           <button className="nav-btn" onClick={handleUpload} disabled={!currentBucket} title="Upload File">↑ Upload</button>

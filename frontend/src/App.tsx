@@ -191,139 +191,149 @@ function App() {
       <TitlebarDrag />
       <div className="dashboard-container">
         <header className="dashboard-header">
-          <div className="app-brand">
-            <img className="app-icon" src="/appicon.png" alt="Walioss" />
-            <h1 className="app-name">Walioss</h1>
-          </div>
-          <div className="window-tabs" aria-label="Windows">
-            {sessionConfig &&
-              tabs.map((t, index) => (
-                <div
-                  key={t.id}
-                  className={`window-tab ${t.id === activeTabId ? 'active' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openTab(t.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openTab(t.id);
-                    }
-                  }}
-                  title={t.title}
-                >
-                  <span className="window-tab-number">#{index + 1}</span>
-                  {renamingTabId === t.id ? (
-                    <input
-                      className="window-tab-rename"
-                      autoFocus
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitRename();
-                        if (e.key === 'Escape') cancelRename();
-                      }}
-                    />
-                  ) : (
-                    <span
-                      className="window-tab-title"
-                      onDoubleClick={() => startRename(t.id, t.title)}
-                      title="Double-click to rename"
-                    >
-                      {t.title}
-                    </span>
-                  )}
+          <div className="dashboard-topbar">
+            <div className="app-brand">
+              <img className="app-icon" src="/appicon.png" alt="Walioss" />
+              <h1 className="app-name">Walioss</h1>
+            </div>
+            <div className="header-info">
+              {sessionConfig && (
+                <div className="transfer-toggle">
                   <button
-                    className="window-tab-close"
+                    className="transfer-btn"
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(t.id);
-                    }}
-                    aria-label="Close tab"
-                    title="Close"
+                    onClick={() => setShowTransfers((v) => !v)}
+                    title="传输进度"
                   >
-                    ×
+                    ⇅
+                    {inProgressCount > 0 && <span className="transfer-badge">{inProgressCount}</span>}
                   </button>
+                  {showTransfers && (
+                    <div className="transfer-panel">
+                      <h4>Transfers</h4>
+                      {transfers.length === 0 ? (
+                        <div className="transfer-empty">No transfers</div>
+                      ) : (
+                        <div className="transfer-sections">
+                          {/* Downloads Section */}
+                          {transfers.filter((t) => t.type === 'download').length > 0 && (
+                            <div className="transfer-section">
+                              <div className="transfer-section-title">Downloads</div>
+                              <div className="transfer-list">
+                                {transfers
+                                  .filter((t) => t.type === 'download')
+                                  .map((t) => (
+                                    <div key={t.id} className="transfer-item compact">
+                                      <div className="transfer-row">
+                                        <span className="transfer-name" title={t.name}>
+                                          {t.name}
+                                        </span>
+                                        <span className={`status-dot ${t.status}`} />
+                                        {t.status === 'success' && t.localPath && (
+                                          <button className="open-folder-btn" onClick={() => OpenInFinder(t.localPath!)} title="Open in Finder">
+                                            Open
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Uploads Section */}
+                          {transfers.filter((t) => t.type === 'upload').length > 0 && (
+                            <div className="transfer-section">
+                              <div className="transfer-section-title">Uploads</div>
+                              <div className="transfer-list">
+                                {transfers
+                                  .filter((t) => t.type === 'upload')
+                                  .map((t) => (
+                                    <div key={t.id} className="transfer-item compact">
+                                      <div className="transfer-row">
+                                        <span className="transfer-name" title={t.name}>
+                                          {t.name}
+                                        </span>
+                                        <span className={`status-dot ${t.status}`} />
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
-            {sessionConfig && (
-              <button className="window-new-btn" type="button" onClick={addTab} title="New Tab">
-                +
+              )}
+              <span>Region: {sessionConfig?.region || '-'}</span>
+              <button className="btn-settings" onClick={() => setGlobalView('settings')}>
+                Settings
               </button>
-            )}
-          </div>
-          <div className="header-info">
-            {sessionConfig && (
-              <div className="transfer-toggle">
-                <button
-                  className="transfer-btn"
-                  type="button"
-                  onClick={() => setShowTransfers((v) => !v)}
-                  title="传输进度"
-                >
-                  ⇅
-                  {inProgressCount > 0 && <span className="transfer-badge">{inProgressCount}</span>}
+              {sessionConfig && (
+                <button className="btn-logout" onClick={handleLogout}>
+                  Logout
                 </button>
-              {showTransfers && (
-                  <div className="transfer-panel">
-                    <h4>Transfers</h4>
-                    {transfers.length === 0 ? (
-                      <div className="transfer-empty">No transfers</div>
-                    ) : (
-                      <div className="transfer-sections">
-                        {/* Downloads Section */}
-                        {transfers.filter(t => t.type === 'download').length > 0 && (
-                          <div className="transfer-section">
-                            <div className="transfer-section-title">Downloads</div>
-                            <div className="transfer-list">
-                              {transfers.filter(t => t.type === 'download').map((t) => (
-                                <div key={t.id} className="transfer-item compact">
-                                  <div className="transfer-row">
-                                    <span className="transfer-name" title={t.name}>{t.name}</span>
-                                    <span className={`status-dot ${t.status}`} />
-                                    {t.status === 'success' && t.localPath && (
-                                      <button 
-                                        className="open-folder-btn" 
-                                        onClick={() => OpenInFinder(t.localPath!)}
-                                        title="Open in Finder"
-                                      >
-                                        Open
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {/* Uploads Section */}
-                        {transfers.filter(t => t.type === 'upload').length > 0 && (
-                          <div className="transfer-section">
-                            <div className="transfer-section-title">Uploads</div>
-                            <div className="transfer-list">
-                              {transfers.filter(t => t.type === 'upload').map((t) => (
-                                <div key={t.id} className="transfer-item compact">
-                                  <div className="transfer-row">
-                                    <span className="transfer-name" title={t.name}>{t.name}</span>
-                                    <span className={`status-dot ${t.status}`} />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            <span>Region: {sessionConfig?.region || '-'}</span>
-            <button className="btn-settings" onClick={() => setGlobalView('settings')}>Settings</button>
-            {sessionConfig && <button className="btn-logout" onClick={handleLogout}>Logout</button>}
+              )}
+            </div>
           </div>
+
+          {sessionConfig && (
+            <div className="dashboard-tabbar">
+              <div className="window-tabs" aria-label="Windows">
+                {tabs.map((t, index) => (
+                  <div
+                    key={t.id}
+                    className={`window-tab ${t.id === activeTabId ? 'active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openTab(t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openTab(t.id);
+                      }
+                    }}
+                    title={t.title}
+                  >
+                    <span className="window-tab-number">#{index + 1}</span>
+                    {renamingTabId === t.id ? (
+                      <input
+                        className="window-tab-rename"
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename();
+                          if (e.key === 'Escape') cancelRename();
+                        }}
+                      />
+                    ) : (
+                      <span className="window-tab-title" onDoubleClick={() => startRename(t.id, t.title)} title="Double-click to rename">
+                        {t.title}
+                      </span>
+                    )}
+                    <button
+                      className="window-tab-close"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(t.id);
+                      }}
+                      aria-label="Close tab"
+                      title="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button className="window-new-btn" type="button" onClick={addTab} title="New Tab">
+                  +
+                </button>
+              </div>
+            </div>
+          )}
         </header>
         <main className="dashboard-main">
           {globalView === 'settings' ? (

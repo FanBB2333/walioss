@@ -188,6 +188,17 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
 }
 
+function formatDuration(totalSeconds: number) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return '-';
+  const seconds = Math.floor(totalSeconds);
+  const s = seconds % 60;
+  const m = Math.floor(seconds / 60) % 60;
+  const h = Math.floor(seconds / 3600);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${m}:${pad(s)}`;
+}
+
 interface FilePreviewModalProps {
   isOpen: boolean;
   config: main.OSSConfig;
@@ -208,6 +219,8 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   const [originalText, setOriginalText] = useState<string>('');
   const [truncated, setTruncated] = useState(false);
   const [highlightHtml, setHighlightHtml] = useState<string>('');
+  const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
+  const [videoMeta, setVideoMeta] = useState<{ width: number; height: number; duration: number } | null>(null);
 
   const fileKey = useMemo(() => {
     if (!object?.path || !bucket) return '';
@@ -247,6 +260,8 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
     setOriginalText('');
     setTruncated(false);
     setHighlightHtml('');
+    setImageResolution(null);
+    setVideoMeta(null);
 
     const load = async () => {
       try {
@@ -328,7 +343,17 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
       return (
         <div className="preview-media">
           {presignedUrl ? (
-            <img className="preview-image" src={presignedUrl} alt={object.name} />
+            <img
+              className="preview-image"
+              src={presignedUrl}
+              alt={object.name}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                  setImageResolution({ width: img.naturalWidth, height: img.naturalHeight });
+                }
+              }}
+            />
           ) : (
             <div className="preview-empty">No preview URL</div>
           )}
@@ -340,7 +365,21 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
       return (
         <div className="preview-media">
           {presignedUrl ? (
-            <video className="preview-video" src={presignedUrl} controls preload="metadata" />
+            <video
+              className="preview-video"
+              src={presignedUrl}
+              controls
+              preload="metadata"
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                const duration = Number.isFinite(v.duration) ? v.duration : 0;
+                const width = v.videoWidth || 0;
+                const height = v.videoHeight || 0;
+                if (duration > 0 || (width > 0 && height > 0)) {
+                  setVideoMeta({ duration, width, height });
+                }
+              }}
+            />
           ) : (
             <div className="preview-empty">No preview URL</div>
           )}
@@ -415,7 +454,52 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
               <span className="preview-path" title={object.path}>
                 {object.path}
               </span>
-              {object.size > 0 && <span className="preview-size">{formatBytes(object.size)}</span>}
+            </div>
+            <div className="preview-meta">
+              <div className="meta-chip">
+                <span className="meta-label">Type</span>
+                <span className="meta-value">{kindFromName === 'text' ? 'Text' : kindFromName === 'image' ? 'Image' : kindFromName === 'video' ? 'Video' : 'File'}</span>
+              </div>
+              {object.size > 0 && (
+                <div className="meta-chip">
+                  <span className="meta-label">Size</span>
+                  <span className="meta-value">{formatBytes(object.size)}</span>
+                </div>
+              )}
+              {kindFromName === 'image' && imageResolution && (
+                <div className="meta-chip">
+                  <span className="meta-label">Resolution</span>
+                  <span className="meta-value">
+                    {imageResolution.width}×{imageResolution.height}
+                  </span>
+                </div>
+              )}
+              {kindFromName === 'video' && videoMeta?.width && videoMeta?.height && (
+                <div className="meta-chip">
+                  <span className="meta-label">Resolution</span>
+                  <span className="meta-value">
+                    {videoMeta.width}×{videoMeta.height}
+                  </span>
+                </div>
+              )}
+              {kindFromName === 'video' && videoMeta?.duration ? (
+                <div className="meta-chip">
+                  <span className="meta-label">Duration</span>
+                  <span className="meta-value">{formatDuration(videoMeta.duration)}</span>
+                </div>
+              ) : null}
+              {object.storageClass && (
+                <div className="meta-chip">
+                  <span className="meta-label">Storage</span>
+                  <span className="meta-value">{object.storageClass}</span>
+                </div>
+              )}
+              {object.lastModified && (
+                <div className="meta-chip">
+                  <span className="meta-label">Modified</span>
+                  <span className="meta-value">{object.lastModified}</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="preview-actions">
