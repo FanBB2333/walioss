@@ -14,8 +14,49 @@ interface FileBrowserProps {
   initialPath?: string;
 }
 
-const DEFAULT_TABLE_COLUMN_WIDTHS = [360, 110, 120, 190, 150, 160];
-const MIN_TABLE_COLUMN_WIDTHS = [240, 80, 90, 150, 120, 140];
+// Columns: Name, Size, Type, Last Modified, Actions
+const DEFAULT_TABLE_COLUMN_WIDTHS = [440, 110, 120, 190, 200];
+const MIN_TABLE_COLUMN_WIDTHS = [180, 70, 80, 120, 160];
+
+const sumWidths = (widths: number[]) => widths.reduce((sum, w) => sum + w, 0);
+
+const fitWidthsToContainer = (widths: number[], targetWidth: number) => {
+  if (!Number.isFinite(targetWidth) || targetWidth <= 0) return widths;
+  if (widths.length !== MIN_TABLE_COLUMN_WIDTHS.length) return widths;
+
+  const total = sumWidths(widths);
+  if (!Number.isFinite(total) || total <= 0) return widths;
+
+  const minTotal = sumWidths(MIN_TABLE_COLUMN_WIDTHS);
+  if (minTotal > targetWidth) return widths;
+
+  const scale = targetWidth / total;
+  const next = widths.map((w, i) => Math.max(MIN_TABLE_COLUMN_WIDTHS[i], Math.round(w * scale)));
+
+  let diff = targetWidth - sumWidths(next);
+  if (diff > 0) {
+    next[0] += diff;
+    return next;
+  }
+
+  if (diff < 0) {
+    let remaining = -diff;
+    for (let i = 0; i < next.length && remaining > 0; i++) {
+      const slack = next[i] - MIN_TABLE_COLUMN_WIDTHS[i];
+      if (slack <= 0) continue;
+      const take = Math.min(slack, remaining);
+      next[i] -= take;
+      remaining -= take;
+    }
+  }
+
+  const final = sumWidths(next);
+  if (final !== targetWidth) {
+    next[0] = Math.max(MIN_TABLE_COLUMN_WIDTHS[0], next[0] + (targetWidth - final));
+  }
+
+  return next;
+};
 
 type Bookmark = {
   id: string;
@@ -58,7 +99,13 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
   const [addressBarValue, setAddressBarValue] = useState('');
   const addressInputRef = useRef<HTMLInputElement>(null);
 
-  const [columnWidths, setColumnWidths] = useState<number[]>(DEFAULT_TABLE_COLUMN_WIDTHS);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [columnWidths, setColumnWidths] = useState<number[]>(() => {
+    const fallbackWidth = Math.max(720, window.innerWidth - 160);
+    return fitWidthsToContainer(DEFAULT_TABLE_COLUMN_WIDTHS, fallbackWidth);
+  });
+
+  const tableVisible = !!currentBucket && objects.length > 0;
 
   const storageKey = profileName ? `oss-bookmarks:${profileName}` : null;
 
@@ -110,6 +157,33 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
     setPreviewModalOpen(false);
     setPreviewObject(null);
   }, [currentBucket, currentPrefix]);
+
+  useEffect(() => {
+    if (!tableVisible) return;
+    const el = tableContainerRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const width = Math.floor(entry.contentRect.width);
+      if (!Number.isFinite(width) || width <= 0) return;
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setColumnWidths((prev) => {
+          const next = fitWidthsToContainer(prev, width);
+          return next.every((w, i) => w === prev[i]) ? prev : next;
+        });
+      });
+    });
+
+    observer.observe(el);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [tableVisible]);
 
   useEffect(() => {
     if (!currentBucket) return;
@@ -700,11 +774,8 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
                 <p>Folder is empty.</p>
              </div>
           ) : (
-            <div className="file-table-container">
-              <table
-                className="file-table"
-                style={{ width: columnWidths.reduce((sum, w) => sum + w, 0), minWidth: '100%' }}
-              >
+            <div className="file-table-container" ref={tableContainerRef}>
+              <table className="file-table">
                 <colgroup>
                   {columnWidths.map((w, i) => (
                     <col key={i} style={{ width: `${w}px` }} />
@@ -727,10 +798,6 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
                     <th className="resizable">
                       <span className="th-label">Last Modified</span>
                       <div className="col-resizer" onPointerDown={(e) => startColumnResize(3, e)} />
-                    </th>
-                    <th className="resizable">
-                      <span className="th-label">Storage Class</span>
-                      <div className="col-resizer" onPointerDown={(e) => startColumnResize(4, e)} />
                     </th>
                     <th>
                       <span className="th-label">Actions</span>
@@ -763,7 +830,6 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
                       <td>{!isFolder(obj) ? formatSize(obj.size) : '-'}</td>
                       <td>{displayType(obj)}</td>
                       <td>{obj.lastModified || '-'}</td>
-                      <td>{obj.storageClass || '-'}</td>
                       <td className="file-actions-td">
                         <div className="file-actions">
                           {isFolder(obj) ? (

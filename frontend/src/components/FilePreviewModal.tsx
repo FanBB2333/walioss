@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { main } from '../../wailsjs/go/models';
 import { GetObjectText, PresignObject, PutObjectText } from '../../wailsjs/go/main/OSSService';
 import './FilePreviewModal.css';
@@ -257,6 +257,14 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
 
   const dirty = canEditText && text !== originalText;
 
+  const requestClose = useCallback(() => {
+    if (dirty) {
+      const ok = window.confirm('You have unsaved changes. Discard them?');
+      if (!ok) return;
+    }
+    onClose();
+  }, [dirty, onClose]);
+
   useEffect(() => {
     if (!isOpen || !object) return;
 
@@ -308,6 +316,18 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   }, [bucket, canEditText, config, fileKey, isOpen, kindFromName, object]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        requestClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, requestClose]);
+
+  useEffect(() => {
     if (!isOpen || kind !== 'text') return;
     const timer = window.setTimeout(() => {
       const head = text.slice(0, MAX_HIGHLIGHT_CHARS);
@@ -318,14 +338,6 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   }, [isOpen, kind, text]);
 
   if (!isOpen || !object) return null;
-
-  const requestClose = () => {
-    if (dirty) {
-      const ok = window.confirm('You have unsaved changes. Discard them?');
-      if (!ok) return;
-    }
-    onClose();
-  };
 
   const handleSave = async () => {
     if (!canEditText || !fileKey) return;
@@ -527,8 +539,15 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
                 Download
               </button>
             )}
-            <button className="preview-btn" onClick={requestClose} disabled={saving}>
-              Close
+            <button
+              className="icon-close-btn"
+              type="button"
+              onClick={requestClose}
+              disabled={saving}
+              aria-label="Close preview"
+              title="Close"
+            >
+              ×
             </button>
           </div>
         </div>

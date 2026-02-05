@@ -102,12 +102,12 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onBack}>
+      <div className="modal-overlay" onClick={onBack}>
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-container">
       <div className="settings-header">
         <button
-          className="settings-close-btn"
+          className="icon-close-btn settings-close-btn"
           type="button"
           onClick={onBack}
           aria-label="Close settings"

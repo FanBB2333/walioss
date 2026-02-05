@@ -728,7 +728,44 @@ func (s *OSSService) GetObjectText(config OSSConfig, bucket string, object strin
 		return "", fmt.Errorf("read object failed: %s", msg)
 	}
 
-	return string(stdout), nil
+	return stripOssutilElapsedFooter(string(stdout)), nil
+}
+
+func stripOssutilElapsedFooter(output string) string {
+	trimmed := strings.TrimRight(output, "\r\n")
+	if trimmed == "" {
+		return output
+	}
+
+	lastNewline := strings.LastIndex(trimmed, "\n")
+	if lastNewline == -1 {
+		if isOssutilElapsedFooterLine(strings.TrimSpace(trimmed)) {
+			return ""
+		}
+		return output
+	}
+
+	lastLine := strings.TrimSpace(strings.TrimSuffix(trimmed[lastNewline+1:], "\r"))
+	if !isOssutilElapsedFooterLine(lastLine) {
+		return output
+	}
+
+	return trimmed[:lastNewline+1]
+}
+
+func isOssutilElapsedFooterLine(line string) bool {
+	const suffix = "(s) elapsed"
+	if !strings.HasSuffix(line, suffix) {
+		return false
+	}
+
+	num := strings.TrimSpace(strings.TrimSuffix(line, suffix))
+	if num == "" {
+		return false
+	}
+
+	_, err := strconv.ParseFloat(num, 64)
+	return err == nil
 }
 
 func (s *OSSService) PutObjectText(config OSSConfig, bucket string, object string, content string) error {

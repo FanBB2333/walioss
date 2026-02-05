@@ -28,6 +28,33 @@
     margin-bottom: 16px;
 }
 
+.icon-close-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+}
+
+.icon-close-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.icon-close-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .modal-title {
     font-size: 18px;
     font-weight: 600;
@@ -208,6 +235,17 @@ body.theme-light .modal-content {
 }
 
 body.theme-light .modal-title {
+    color: #0f172a;
+}
+
+body.theme-light .icon-close-btn {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    color: rgba(15, 23, 42, 0.8);
+}
+
+body.theme-light .icon-close-btn:hover {
+    background: rgba(15, 23, 42, 0.06);
     color: #0f172a;
 }
 

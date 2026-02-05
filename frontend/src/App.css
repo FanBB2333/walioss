@@ -125,7 +125,7 @@ body.theme-light .dashboard-container::after {
 
 .window-tabs {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: flex-start;
     gap: 6px;
     padding: 0;
@@ -175,36 +175,10 @@ body.theme-light .dashboard-container::after {
 }
 
 .window-tab.active {
-    background: rgba(12, 16, 32, 0.55);
-    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.18);
     color: #ffffff;
-    border-bottom-color: transparent;
-    border-radius: 12px 12px 0 0;
-    padding-bottom: 16px;
     z-index: 2;
-}
-
-.window-tab.active::before,
-.window-tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    width: 18px;
-    height: 18px;
-    background: rgba(12, 16, 32, 0.55);
-    pointer-events: none;
-}
-
-.window-tab.active::before {
-    left: -18px;
-    border-bottom-right-radius: 18px;
-    box-shadow: 1px 1px 0 0 rgba(255, 255, 255, 0.14);
-}
-
-.window-tab.active::after {
-    right: -18px;
-    border-bottom-left-radius: 18px;
-    box-shadow: -1px 1px 0 0 rgba(255, 255, 255, 0.14);
 }
 
 .window-tab.active .window-tab-number {
@@ -551,6 +525,8 @@ body.theme-light .dashboard-container::after {
 .window-panel.active {
     display: flex;
     flex-direction: column;
+    background: rgba(255, 255, 255, 0.03);
+    transition: background-color 220ms ease;
 }
 
 .placeholder-content {
@@ -615,22 +591,12 @@ body.theme-light .window-tab:hover {
 
 body.theme-light .window-tab.active {
     background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(15, 23, 42, 0.14);
+    border-color: rgba(15, 23, 42, 0.16);
     color: #0f172a;
-    border-bottom-color: transparent;
 }
 
-body.theme-light .window-tab.active::before,
-body.theme-light .window-tab.active::after {
-    background: rgba(255, 255, 255, 0.9);
-}
-
-body.theme-light .window-tab.active::before {
-    box-shadow: 1px 1px 0 0 rgba(15, 23, 42, 0.14);
-}
-
-body.theme-light .window-tab.active::after {
-    box-shadow: -1px 1px 0 0 rgba(15, 23, 42, 0.14);
+body.theme-light .window-panel.active {
+    background: rgba(255, 255, 255, 0.45);
 }
 
 body.theme-light .window-tab-number {

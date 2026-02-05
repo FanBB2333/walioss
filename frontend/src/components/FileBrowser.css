@@ -412,10 +412,9 @@
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
-    overflow: auto;
+    overflow: hidden;
     box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.65);
     transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
-    scrollbar-width: thin;
 }
 
 .file-table {
