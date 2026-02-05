@@ -16,6 +16,7 @@ body,
 body {
     background: #1a1a2e;
     color: #ffffff;
+    transition: background-color 220ms ease, color 220ms ease;
 }
 
 /* macOS titlebar drag region */
@@ -35,8 +36,36 @@ body {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    position: relative;
+    background: none;
     overflow: hidden;
+}
+
+.dashboard-container::before,
+.dashboard-container::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    transition: opacity 260ms ease;
+}
+
+.dashboard-container::before {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    opacity: 1;
+}
+
+.dashboard-container::after {
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #e0f2fe 100%);
+    opacity: 0;
+}
+
+body.theme-light .dashboard-container::before {
+    opacity: 0;
+}
+
+body.theme-light .dashboard-container::after {
+    opacity: 1;
 }
 
 .dashboard-header {
@@ -50,6 +79,9 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease;
 }
 
 .dashboard-topbar {
@@ -66,6 +98,7 @@ body {
     min-width: 0;
     padding-top: 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+    transition: border-color 220ms ease;
 }
 
 .app-brand {
@@ -91,7 +124,7 @@ body {
 
 .window-tabs {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: flex-start;
     gap: 6px;
     padding: 0;
@@ -116,6 +149,7 @@ body {
     min-width: 96px;
     max-width: 240px;
     flex: 1 1 160px;
+    position: relative;
 }
 
 .window-tab-number {
@@ -140,9 +174,13 @@ body {
 }
 
 .window-tab.active {
-    background: rgba(79, 172, 254, 0.14);
-    border-color: rgba(79, 172, 254, 0.45);
+    background: rgba(12, 16, 32, 0.55);
+    border-color: rgba(255, 255, 255, 0.14);
     color: #ffffff;
+    border-bottom-color: transparent;
+    border-radius: 12px 12px 0 0;
+    padding-bottom: 16px;
+    z-index: 2;
 }
 
 .window-tab.active .window-tab-number {
@@ -469,6 +507,8 @@ body {
     min-height: 0;
     overflow: hidden;
     padding: 0;
+    position: relative;
+    z-index: 1;
 }
 
 .window-stack {
@@ -514,7 +554,7 @@ body.theme-light {
 }
 
 body.theme-light .dashboard-container {
-    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #e0f2fe 100%);
+    background: none;
 }
 
 body.theme-light .dashboard-header {
@@ -550,9 +590,10 @@ body.theme-light .window-tab:hover {
 }
 
 body.theme-light .window-tab.active {
-    background: rgba(79, 172, 254, 0.18);
-    border-color: rgba(79, 172, 254, 0.5);
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(15, 23, 42, 0.14);
     color: #0f172a;
+    border-bottom-color: transparent;
 }
 
 body.theme-light .window-tab-number {

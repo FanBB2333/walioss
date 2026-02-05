@@ -320,9 +320,7 @@ function App() {
           )}
         </header>
         <main className="dashboard-main">
-          {globalView === 'settings' ? (
-            <Settings onBack={() => setGlobalView('session')} onThemeChange={handleThemeChange} />
-          ) : !sessionConfig ? (
+          {!sessionConfig ? (
             <Login onLoginSuccess={handleLoginSuccess} />
           ) : (
             <div className="window-stack">
@@ -338,6 +336,11 @@ function App() {
             </div>
           )}
         </main>
+        <Settings
+          isOpen={globalView === 'settings'}
+          onBack={() => setGlobalView('session')}
+          onThemeChange={handleThemeChange}
+        />
         <TransferModal
           isOpen={showTransfers}
           activeTab={transferView}

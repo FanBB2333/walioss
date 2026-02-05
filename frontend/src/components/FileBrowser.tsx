@@ -467,7 +467,7 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
     crumbs.push(
       <span 
         key="root" 
-        className={`crumb ${isRootActive ? 'active' : ''}`} 
+        className={`crumb crumb-root ${isRootActive ? 'active' : ''}`} 
         title="All Buckets"
         onClick={(e) => {
           if (!isRootActive) {
@@ -486,7 +486,7 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
       crumbs.push(
         <span 
           key="bucket" 
-          className={`crumb ${isBucketActive ? 'active' : ''}`} 
+          className={`crumb crumb-bucket ${isBucketActive ? 'active' : ''}`} 
           onClick={(e) => {
             if (!isBucketActive) {
               e.stopPropagation();
