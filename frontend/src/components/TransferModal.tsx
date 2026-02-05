@@ -107,8 +107,8 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
               Uploads
             </button>
           </div>
-          <button className="transfer-close-btn" type="button" onClick={onClose}>
-            Close
+          <button className="icon-close-btn transfer-close-btn" type="button" onClick={onClose} aria-label="Close transfers" title="Close">
+            ×
           </button>
         </div>
 
@@ -203,4 +203,3 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
     </div>
   );
 }
-

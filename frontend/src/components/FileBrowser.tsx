@@ -1479,7 +1479,11 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
 	                  }}
 	                  title={folder.name}
 	                >
-	                  <span className="crumb-popover-item-icon">📁</span>
+	                  <span className="crumb-popover-item-icon" aria-hidden="true">
+	                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+	                      <path d="M3 7a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+	                    </svg>
+	                  </span>
 	                  <span className="crumb-popover-item-name">{folder.name}</span>
 	                </button>
 	              ))}
