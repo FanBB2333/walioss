@@ -45,16 +45,9 @@
     margin-bottom: 18px;
 }
 
-.about-github {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
 .about-link {
     display: inline-flex;
     align-items: center;
-    width: fit-content;
     padding: 0;
     border: none;
     background: none;
@@ -63,32 +56,12 @@
     text-decoration: underline;
     text-underline-offset: 3px;
     font-size: 13px;
+    max-width: 100%;
+    text-align: left;
 }
 
 .about-link:hover {
     color: #4facfe;
-}
-
-.about-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.about-mini-btn {
-    padding: 8px 12px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.85);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.about-mini-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
 }
 
 body.theme-light .about-name {
@@ -98,15 +71,3 @@ body.theme-light .about-name {
 body.theme-light .about-subtitle {
     color: rgba(15, 23, 42, 0.6);
 }
-
-body.theme-light .about-mini-btn {
-    background: rgba(15, 23, 42, 0.04);
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    color: rgba(15, 23, 42, 0.8);
-}
-
-body.theme-light .about-mini-btn:hover {
-    background: rgba(15, 23, 42, 0.06);
-    color: #0f172a;
-}
-

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserOpenURL, ClipboardSetText } from '../../wailsjs/runtime/runtime';
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import './Modal.css';
 import './AboutModal.css';
 
@@ -56,28 +56,14 @@ function AboutModal({ isOpen, info, loading, onClose }: AboutModalProps) {
 
         <div className="about-body">
           <div className="property-row">
-            <div className="property-label">Version</div>
-            <div className="property-value">{loading ? 'Loading…' : version}</div>
-          </div>
-          <div className="property-row">
             <div className="property-label">GitHub</div>
             <div className="property-value">
               {loading ? (
                 'Loading…'
               ) : githubUrl ? (
-                <div className="about-github">
-                  <button className="about-link" type="button" onClick={() => BrowserOpenURL(githubUrl)} title="Open in browser">
-                    {githubUrl}
-                  </button>
-                  <div className="about-actions">
-                    <button className="about-mini-btn" type="button" onClick={() => BrowserOpenURL(githubUrl)}>
-                      Open
-                    </button>
-                    <button className="about-mini-btn" type="button" onClick={() => ClipboardSetText(githubUrl)}>
-                      Copy
-                    </button>
-                  </div>
-                </div>
+                <button className="about-link" type="button" onClick={() => BrowserOpenURL(githubUrl)} title="Open in browser">
+                  {githubUrl}
+                </button>
               ) : (
                 '-'
               )}
@@ -96,4 +82,3 @@ function AboutModal({ isOpen, info, loading, onClose }: AboutModalProps) {
 }
 
 export default AboutModal;
-

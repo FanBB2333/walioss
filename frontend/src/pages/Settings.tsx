@@ -164,31 +164,6 @@ function Settings({ isOpen, onBack, onThemeChange, onNotify, onSettingsSaved }: 
               </div>
             </div>
 
-            {/* Default Connection */}
-            <div className="settings-section">
-              <h2 className="section-title">Default Connection</h2>
-              <div className="form-group">
-                <label className="form-label">Default Region</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={settings.defaultRegion}
-                  onChange={(e) => setSettings({ ...settings, defaultRegion: e.target.value })}
-                  placeholder="e.g., cn-hangzhou"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Default Endpoint</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={settings.defaultEndpoint}
-                  onChange={(e) => setSettings({ ...settings, defaultEndpoint: e.target.value })}
-                  placeholder="e.g., oss-cn-hangzhou.aliyuncs.com"
-                />
-              </div>
-            </div>
-
             {/* Appearance */}
             <div className="settings-section">
               <h2 className="section-title">Appearance</h2>
@@ -224,6 +199,31 @@ function Settings({ isOpen, onBack, onThemeChange, onNotify, onSettingsSaved }: 
                     New Tab
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Default Connection */}
+            <div className="settings-section">
+              <h2 className="section-title">Default Connection</h2>
+              <div className="form-group">
+                <label className="form-label">Default Region</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={settings.defaultRegion}
+                  onChange={(e) => setSettings({ ...settings, defaultRegion: e.target.value })}
+                  placeholder="e.g., cn-hangzhou"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Default Endpoint</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={settings.defaultEndpoint}
+                  onChange={(e) => setSettings({ ...settings, defaultEndpoint: e.target.value })}
+                  placeholder="e.g., oss-cn-hangzhou.aliyuncs.com"
+                />
               </div>
             </div>
 
