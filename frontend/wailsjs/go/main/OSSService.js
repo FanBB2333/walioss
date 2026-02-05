@@ -54,6 +54,10 @@ export function ListObjects(arg1, arg2, arg3) {
   return window['go']['main']['OSSService']['ListObjects'](arg1, arg2, arg3);
 }
 
+export function ListObjectsPage(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['OSSService']['ListObjectsPage'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function LoadProfiles() {
   return window['go']['main']['OSSService']['LoadProfiles']();
 }

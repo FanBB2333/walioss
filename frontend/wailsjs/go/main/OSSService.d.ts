@@ -29,6 +29,8 @@ export function ListBuckets(arg1:main.OSSConfig):Promise<Array<main.BucketInfo>>
 
 export function ListObjects(arg1:main.OSSConfig,arg2:string,arg3:string):Promise<Array<main.ObjectInfo>>;
 
+export function ListObjectsPage(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string,arg5:number):Promise<main.ObjectListPageResult>;
+
 export function LoadProfiles():Promise<Array<main.OSSProfile>>;
 
 export function PresignObject(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<string>;

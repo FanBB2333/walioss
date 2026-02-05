@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { main } from '../../wailsjs/go/models';
-import { DeleteObject, EnqueueDownload, EnqueueUpload, ListBuckets, ListObjects } from '../../wailsjs/go/main/OSSService';
+import { DeleteObject, EnqueueDownload, EnqueueUpload, ListBuckets, ListObjectsPage } from '../../wailsjs/go/main/OSSService';
 import { SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
 import ConfirmationModal from './ConfirmationModal';
 import FilePreviewModal from './FilePreviewModal';
@@ -17,6 +17,7 @@ interface FileBrowserProps {
 // Columns: Name, Size, Type, Last Modified, Actions
 const DEFAULT_TABLE_COLUMN_WIDTHS = [440, 110, 120, 190, 200];
 const MIN_TABLE_COLUMN_WIDTHS = [180, 70, 80, 120, 160];
+const DEFAULT_PAGE_SIZE = 200;
 
 const sumWidths = (widths: number[]) => widths.reduce((sum, w) => sum + w, 0);
 
@@ -88,6 +89,13 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
   const [buckets, setBuckets] = useState<main.BucketInfo[]>([]);
   const [objects, setObjects] = useState<main.ObjectInfo[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [pageIndex, setPageIndex] = useState<number>(1);
+  const [pageMarkers, setPageMarkers] = useState<string[]>(['']); // page 1 marker
+  const [pageHasNext, setPageHasNext] = useState<boolean>(false);
+  const [knownLastPage, setKnownLastPage] = useState<number | null>(null);
+  const [jumpToPage, setJumpToPage] = useState<string>('');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +176,12 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
   }, [currentBucket, currentPrefix]);
 
   useEffect(() => {
+    if (!currentBucket) return;
+    loadObjectsFirstPage(currentBucket, currentPrefix);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageSize]);
+
+  useEffect(() => {
     if (!tableVisible) return;
     const el = tableContainerRef.current;
     if (!el) return;
@@ -201,10 +215,11 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
       if (update?.type !== 'upload' || update?.status !== 'success') return;
       if (update?.bucket !== currentBucket) return;
       if (typeof update?.key === 'string' && !update.key.startsWith(currentPrefix)) return;
-      loadObjects(currentBucket, currentPrefix);
+      const marker = markerForPage(pageIndex);
+      loadObjectsPage(currentBucket, currentPrefix, marker, pageIndex);
     });
     return () => off();
-  }, [config, currentBucket, currentPrefix]);
+  }, [config, currentBucket, currentPrefix, pageIndex, pageMarkers, pageSize]);
 
   // Close menus on click elsewhere
   useEffect(() => {
@@ -229,14 +244,118 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
     }
   };
 
-  const loadObjects = async (bucket: string, prefix: string) => {
+  const resetPagination = () => {
+    setPageIndex(1);
+    setPageMarkers(['']);
+    setPageHasNext(false);
+    setKnownLastPage(null);
+    setJumpToPage('');
+  };
+
+  const markerForPage = (page: number) => {
+    if (page <= 1) return '';
+    return pageMarkers[page - 1] ?? '';
+  };
+
+  const loadObjectsPage = async (bucket: string, prefix: string, marker: string, targetPage: number) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await ListObjects(config, bucket, prefix);
-      setObjects(result || []);
+      const result = await ListObjectsPage(config, bucket, prefix, marker, pageSize);
+      setObjects(result?.items || []);
+      setPageIndex(targetPage);
+
+      const hasNext = !!result?.isTruncated && !!result?.nextMarker;
+      setPageHasNext(hasNext);
+
+      setPageMarkers((prev) => {
+        const next = [...prev];
+        while (next.length < targetPage) next.push('');
+        next[targetPage - 1] = marker;
+
+        if (hasNext) {
+          next[targetPage] = result.nextMarker;
+        } else {
+          next.length = Math.min(next.length, targetPage);
+        }
+        return next;
+      });
+
+      if (!hasNext) {
+        setKnownLastPage(targetPage);
+      }
     } catch (err: any) {
       setError(err.message || "Failed to list objects");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadObjectsFirstPage = (bucket: string, prefix: string) => {
+    resetPagination();
+    loadObjectsPage(bucket, prefix, '', 1);
+  };
+
+  const jumpToObjectsPage = async (targetPage: number) => {
+    if (!currentBucket) return;
+    if (targetPage < 1) return;
+
+    if (knownLastPage !== null && targetPage > knownLastPage) {
+      setError(`Page ${targetPage} is out of range.`);
+      return;
+    }
+
+    const bucket = currentBucket;
+    const prefix = currentPrefix;
+
+    setLoading(true);
+    setError(null);
+    try {
+      let markers = [...pageMarkers];
+      let lastPage: number | null = knownLastPage;
+
+      while (markers.length < targetPage) {
+        const currentPage = markers.length;
+        const pageMarker = markers[currentPage - 1] ?? '';
+        const res = await ListObjectsPage(config, bucket, prefix, pageMarker, pageSize);
+        const hasMore = !!res?.isTruncated && !!res?.nextMarker;
+        if (!hasMore) {
+          lastPage = currentPage;
+          break;
+        }
+        markers.push(res.nextMarker);
+      }
+
+      if (markers.length < targetPage) {
+        if (lastPage !== knownLastPage) {
+          setKnownLastPage(lastPage);
+        }
+        throw new Error(`Page ${targetPage} is out of range.`);
+      }
+
+      const targetMarker = markers[targetPage - 1] ?? '';
+      const result = await ListObjectsPage(config, bucket, prefix, targetMarker, pageSize);
+      setObjects(result?.items || []);
+      setPageIndex(targetPage);
+
+      const hasNext = !!result?.isTruncated && !!result?.nextMarker;
+      setPageHasNext(hasNext);
+
+      if (hasNext) {
+        markers[targetPage] = result.nextMarker;
+      } else {
+        lastPage = targetPage;
+        markers = markers.slice(0, targetPage);
+      }
+
+      setPageMarkers(markers);
+      if (!hasNext) {
+        setKnownLastPage(targetPage);
+      } else if (lastPage !== knownLastPage) {
+        setKnownLastPage(lastPage);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to jump to page');
     } finally {
       setLoading(false);
     }
@@ -250,11 +369,12 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
       setCurrentBucket('');
       setCurrentPrefix('');
       setObjects([]);
+      resetPagination();
       loadBuckets();
     } else {
       setCurrentBucket(normalizedBucket);
       setCurrentPrefix(normalizedPrefix);
-      loadObjects(normalizedBucket, normalizedPrefix);
+      loadObjectsFirstPage(normalizedBucket, normalizedPrefix);
     }
 
     if (opts?.pushHistory === false) return;
@@ -316,7 +436,30 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
       loadBuckets();
       return;
     }
-    loadObjects(currentBucket, currentPrefix);
+    const marker = markerForPage(pageIndex);
+    loadObjectsPage(currentBucket, currentPrefix, marker, pageIndex);
+  };
+
+  const handlePrevPage = () => {
+    if (!currentBucket) return;
+    if (pageIndex <= 1) return;
+    const target = pageIndex - 1;
+    loadObjectsPage(currentBucket, currentPrefix, markerForPage(target), target);
+  };
+
+  const handleNextPage = () => {
+    if (!currentBucket) return;
+    if (!pageHasNext) return;
+    const target = pageIndex + 1;
+    const marker = markerForPage(target);
+    if (!marker) return;
+    loadObjectsPage(currentBucket, currentPrefix, marker, target);
+  };
+
+  const handleJumpSubmit = () => {
+    const value = parseInt(jumpToPage, 10);
+    if (!Number.isFinite(value) || value < 1) return;
+    jumpToObjectsPage(value);
   };
 
   const startColumnResize = (boundaryIndex: number, e: React.PointerEvent) => {
@@ -546,7 +689,8 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
        
       await DeleteObject(config, currentBucket, fullKey);
       setDeleteModalOpen(false);
-      loadObjects(currentBucket, currentPrefix); // Refresh
+      const marker = markerForPage(pageIndex);
+      loadObjectsPage(currentBucket, currentPrefix, marker, pageIndex); // Refresh
     } catch (err: any) {
       alert("Delete failed: " + err.message);
     } finally {
@@ -796,12 +940,19 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
             <p>Loading...</p>
           </div>
         ) : error ? (
-           <div className="empty-state">
-             <span className="empty-icon">⚠</span>
-             <p>{error}</p>
-             <button className="btn btn-secondary" onClick={() => currentBucket ? loadObjects(currentBucket, currentPrefix) : loadBuckets()}>Retry</button>
-           </div>
-        ) : !currentBucket ? (
+	           <div className="empty-state">
+	             <span className="empty-icon">⚠</span>
+	             <p>{error}</p>
+	             <button
+	               className="btn btn-secondary"
+	               onClick={() =>
+	                 currentBucket ? loadObjectsPage(currentBucket, currentPrefix, markerForPage(pageIndex), pageIndex) : loadBuckets()
+	               }
+	             >
+	               Retry
+	             </button>
+	           </div>
+	        ) : !currentBucket ? (
             <div className={`bucket-grid ${buckets.length === 0 ? 'empty' : ''}`}>
               {buckets.length === 0 ? (
                 <div className="empty-state">
@@ -926,11 +1077,59 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
+	                </tbody>
+	              </table>
+	              <div className="file-table-footer">
+	                <div className="page-status">
+	                  Page {pageIndex}
+	                  {knownLastPage ? ` / ${knownLastPage}` : ''}
+	                </div>
+	                <div className="page-controls">
+	                  <button className="page-btn" onClick={handlePrevPage} disabled={loading || pageIndex <= 1}>
+	                    Prev
+	                  </button>
+	                  <button className="page-btn" onClick={handleNextPage} disabled={loading || !pageHasNext}>
+	                    Next
+	                  </button>
+	                  <div className="page-jump">
+	                    <input
+	                      className="page-jump-input"
+	                      type="number"
+	                      min="1"
+	                      inputMode="numeric"
+	                      value={jumpToPage}
+	                      onChange={(e) => setJumpToPage(e.target.value)}
+	                      onKeyDown={(e) => {
+	                        if (e.key === 'Enter') handleJumpSubmit();
+	                      }}
+	                      placeholder="Page"
+	                      disabled={loading}
+	                    />
+	                    <button className="page-btn" onClick={handleJumpSubmit} disabled={loading || !jumpToPage.trim()}>
+	                      Go
+	                    </button>
+	                  </div>
+	                  <select
+	                    className="page-size-select"
+	                    value={pageSize}
+	                    onChange={(e) => {
+	                      const next = parseInt(e.target.value, 10);
+	                      if (!Number.isFinite(next) || next <= 0) return;
+	                      setPageSize(next);
+	                    }}
+	                    disabled={loading}
+	                    title="Page size"
+	                  >
+	                    <option value={100}>100 / page</option>
+	                    <option value={200}>200 / page</option>
+	                    <option value={500}>500 / page</option>
+	                    <option value={1000}>1000 / page</option>
+	                  </select>
+	                </div>
+	              </div>
+	            </div>
+	          )
+	        )}
       </div>
 
       {contextMenu.visible && (
@@ -1004,7 +1203,7 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
         object={previewObject}
         onClose={() => setPreviewModalOpen(false)}
         onDownload={(obj) => handleDownload(obj)}
-        onSaved={() => currentBucket && loadObjects(currentBucket, currentPrefix)}
+        onSaved={() => currentBucket && loadObjectsPage(currentBucket, currentPrefix, markerForPage(pageIndex), pageIndex)}
       />
 
       {/* Properties Modal */}

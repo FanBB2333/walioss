@@ -247,37 +247,30 @@ func (s *OSSService) TestConnection(config OSSConfig) ConnectionResult {
 		}
 	}
 
-	// Build ossutil command with credentials
-	args := []string{"ls"}
-
+	// Use SDK paged listing for a lightweight smoke test (avoid slow full ls on huge prefixes).
 	if hasDefaultLocation {
-		args = append(args, fmt.Sprintf("oss://%s/%s", defaultBucket, defaultPrefix))
-	}
+		_, err := s.ListObjectsPage(config, defaultBucket, defaultPrefix, "", 1)
+		if err != nil {
+			return ConnectionResult{
+				Success: false,
+				Message: fmt.Sprintf("Connection failed: %s", err.Error()),
+			}
+		}
 
-	args = append(
-		args,
-		"--access-key-id", config.AccessKeyID,
-		"--access-key-secret", config.AccessKeySecret,
-		"--region", region,
-	)
-
-	if endpoint != "" {
-		args = append(args, "--endpoint", endpoint)
-	}
-
-	output, err := s.runOssutil(args...)
-
-	if err != nil {
 		return ConnectionResult{
-			Success: false,
-			Message: fmt.Sprintf("Connection failed: %s", ossutilOutputOrError(err, output)),
+			Success: true,
+			Message: "Connection successful",
 		}
 	}
 
-	return ConnectionResult{
-		Success: true,
-		Message: "Connection successful",
+	if err := sdkSmokeTestListBuckets(config); err != nil {
+		return ConnectionResult{
+			Success: false,
+			Message: fmt.Sprintf("Connection failed: %s", err.Error()),
+		}
 	}
+
+	return ConnectionResult{Success: true, Message: "Connection successful"}
 }
 
 // SaveProfile saves an OSS profile to config directory
