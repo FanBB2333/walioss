@@ -121,6 +121,27 @@
     color: rgba(255, 255, 255, 0.3);
 }
 
+.form-inline {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.form-inline .form-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.form-inline-btn {
+    padding: 10px 14px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 .theme-toggle {
     display: flex;
     gap: 10px;

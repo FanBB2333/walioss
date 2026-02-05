@@ -123,29 +123,31 @@ function Settings({ isOpen, onBack, onThemeChange, onNotify, onSettingsSaved }: 
         </button>
       </div>
 
-      <div className="settings-content">
-        {/* Ossutil Configuration */}
-        <div className="settings-section">
-          <h2 className="section-title">Ossutil Configuration</h2>
-          <div className="form-group">
-            <label className="form-label">Ossutil Path</label>
-            <input
-              type="text"
-              className="form-input"
-              value={settings.ossutilPath}
-              onChange={(e) => setSettings({ ...settings, ossutilPath: e.target.value })}
-              placeholder="Leave empty to use auto-detected ossutil"
-            />
-          </div>
-          <button 
-            className="back-btn" 
-            onClick={handleTestOssutil}
-            disabled={loading}
-            style={{ marginTop: '8px' }}
-          >
-            Test ossutil
-          </button>
-        </div>
+	      <div className="settings-content">
+	        {/* Ossutil Configuration */}
+	        <div className="settings-section">
+	          <h2 className="section-title">Ossutil Configuration</h2>
+	          <div className="form-group">
+	            <label className="form-label">Ossutil Path</label>
+	            <div className="form-inline">
+	              <input
+	                type="text"
+	                className="form-input"
+	                value={settings.ossutilPath}
+	                onChange={(e) => setSettings({ ...settings, ossutilPath: e.target.value })}
+	                placeholder="Leave empty to use auto-detected ossutil"
+	              />
+	              <button
+	                className="back-btn form-inline-btn"
+	                type="button"
+	                onClick={handleTestOssutil}
+	                disabled={loading}
+	              >
+	                Test
+	              </button>
+	            </div>
+	          </div>
+	        </div>
 
         {/* Default Connection */}
         <div className="settings-section">
