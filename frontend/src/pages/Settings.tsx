@@ -106,7 +106,15 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-container">
       <div className="settings-header">
-        <button className="back-btn" onClick={onBack}>← Back</button>
+        <button
+          className="settings-close-btn"
+          type="button"
+          onClick={onBack}
+          aria-label="Close settings"
+          title="Close"
+        >
+          ×
+        </button>
         <h1 className="settings-title">Settings</h1>
       </div>
 

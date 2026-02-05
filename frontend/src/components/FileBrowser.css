@@ -412,15 +412,17 @@
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
-    overflow: hidden;
+    overflow: auto;
     box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.65);
     transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+    scrollbar-width: thin;
 }
 
 .file-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    table-layout: fixed;
 }
 
 .file-table th {
@@ -431,12 +433,55 @@
     font-weight: 500;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease;
+    position: relative;
+    white-space: nowrap;
+}
+
+.file-table th.resizable {
+    padding-right: 20px;
+}
+
+.th-label {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.col-resizer {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+    touch-action: none;
+}
+
+.col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 18%;
+    bottom: 18%;
+    left: 50%;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.file-table th:hover .col-resizer::after {
+    opacity: 1;
 }
 
 .file-table td {
     padding: 10px 12px;
     color: rgba(255, 255, 255, 0.88);
     transition: color 220ms ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .file-table tbody tr {
@@ -461,6 +506,7 @@
     align-items: center;
     gap: 12px;
     cursor: pointer;
+    min-width: 0;
 }
 
 .file-icon {
@@ -484,6 +530,10 @@
 
 .file-name-text {
     font-weight: 500;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .file-actions {
@@ -623,6 +673,10 @@ body.theme-light .file-browser .file-table th {
     background: rgba(15, 23, 42, 0.03);
     color: rgba(15, 23, 42, 0.65);
     border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .file-browser .col-resizer::after {
+    background: rgba(15, 23, 42, 0.18);
 }
 
 body.theme-light .file-browser .file-table td {

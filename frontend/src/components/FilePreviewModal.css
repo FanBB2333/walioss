@@ -131,6 +131,7 @@
     min-height: 0;
     padding: 16px 18px;
     overflow: hidden;
+    text-align: left;
 }
 
 .preview-loading {
@@ -236,6 +237,7 @@
     font-size: 12px;
     line-height: 1.6;
     white-space: pre;
+    text-align: left;
     scrollbar-width: none;
 }
 
@@ -263,6 +265,7 @@
     font-size: 12px;
     line-height: 1.6;
     overflow: auto;
+    text-align: left;
     scrollbar-width: thin;
 }
 
@@ -281,6 +284,7 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 12px;
     line-height: 1.6;
+    text-align: left;
     scrollbar-width: thin;
 }
 

@@ -14,6 +14,9 @@ interface FileBrowserProps {
   initialPath?: string;
 }
 
+const DEFAULT_TABLE_COLUMN_WIDTHS = [360, 110, 120, 190, 150, 160];
+const MIN_TABLE_COLUMN_WIDTHS = [240, 80, 90, 150, 120, 140];
+
 type Bookmark = {
   id: string;
   bucket: string;
@@ -54,6 +57,8 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
   const [addressBarEditing, setAddressBarEditing] = useState(false);
   const [addressBarValue, setAddressBarValue] = useState('');
   const addressInputRef = useRef<HTMLInputElement>(null);
+
+  const [columnWidths, setColumnWidths] = useState<number[]>(DEFAULT_TABLE_COLUMN_WIDTHS);
 
   const storageKey = profileName ? `oss-bookmarks:${profileName}` : null;
 
@@ -189,6 +194,49 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
       return;
     }
     loadObjects(currentBucket, currentPrefix);
+  };
+
+  const startColumnResize = (boundaryIndex: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (boundaryIndex < 0 || boundaryIndex >= columnWidths.length - 1) return;
+
+    const startX = e.clientX;
+    const startWidths = [...columnWidths];
+
+    const handleMove = (ev: PointerEvent) => {
+      const delta = ev.clientX - startX;
+      const a = boundaryIndex;
+      const b = boundaryIndex + 1;
+      const total = startWidths[a] + startWidths[b];
+
+      const minA = MIN_TABLE_COLUMN_WIDTHS[a] ?? 80;
+      const minB = MIN_TABLE_COLUMN_WIDTHS[b] ?? 80;
+
+      let nextA = startWidths[a] + delta;
+      nextA = Math.max(minA, Math.min(total - minB, nextA));
+      const nextB = total - nextA;
+
+      setColumnWidths((prev) => {
+        const next = [...prev];
+        next[a] = nextA;
+        next[b] = nextB;
+        return next;
+      });
+    };
+
+    const stop = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', stop);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', stop);
   };
 
   const handleBreadcrumbClick = (index: number) => {
@@ -653,15 +701,40 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
              </div>
           ) : (
             <div className="file-table-container">
-              <table className="file-table">
+              <table
+                className="file-table"
+                style={{ width: columnWidths.reduce((sum, w) => sum + w, 0), minWidth: '100%' }}
+              >
+                <colgroup>
+                  {columnWidths.map((w, i) => (
+                    <col key={i} style={{ width: `${w}px` }} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Size</th>
-                    <th>Type</th>
-                    <th>Last Modified</th>
-                    <th>Storage Class</th>
-                    <th>Actions</th>
+                    <th className="resizable">
+                      <span className="th-label">Name</span>
+                      <div className="col-resizer" onPointerDown={(e) => startColumnResize(0, e)} />
+                    </th>
+                    <th className="resizable">
+                      <span className="th-label">Size</span>
+                      <div className="col-resizer" onPointerDown={(e) => startColumnResize(1, e)} />
+                    </th>
+                    <th className="resizable">
+                      <span className="th-label">Type</span>
+                      <div className="col-resizer" onPointerDown={(e) => startColumnResize(2, e)} />
+                    </th>
+                    <th className="resizable">
+                      <span className="th-label">Last Modified</span>
+                      <div className="col-resizer" onPointerDown={(e) => startColumnResize(3, e)} />
+                    </th>
+                    <th className="resizable">
+                      <span className="th-label">Storage Class</span>
+                      <div className="col-resizer" onPointerDown={(e) => startColumnResize(4, e)} />
+                    </th>
+                    <th>
+                      <span className="th-label">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -671,57 +744,61 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
                       onClick={() => (isFolder(obj) ? handleFolderClick(obj.name) : handlePreview(obj))}
                       onContextMenu={(e) => handleContextMenu(e, obj)}
                     >
-                      <td className="file-name-cell">
-                        <div className={`file-icon ${isFolder(obj) ? 'folder-icon' : 'item-icon'}`}>
-                           {isFolder(obj) ? (
-                             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                               <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-                             </svg>
-                           ) : (
-                             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                               <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
-                             </svg>
-                           )}
+                      <td className="file-name-td">
+                        <div className="file-name-cell">
+                          <div className={`file-icon ${isFolder(obj) ? 'folder-icon' : 'item-icon'}`}>
+                             {isFolder(obj) ? (
+                               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                 <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                               </svg>
+                             ) : (
+                               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                 <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                               </svg>
+                             )}
+                          </div>
+                          <span className="file-name-text">{obj.name}</span>
                         </div>
-                        <span className="file-name-text">{obj.name}</span>
                       </td>
                       <td>{!isFolder(obj) ? formatSize(obj.size) : '-'}</td>
                       <td>{displayType(obj)}</td>
                       <td>{obj.lastModified || '-'}</td>
                       <td>{obj.storageClass || '-'}</td>
-                      <td className="file-actions">
-                        {isFolder(obj) ? (
-                          <button
-                            className="link-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleFolderClick(obj.name);
-                            }}
-                          >
-                            Open
-                          </button>
-                        ) : (
-                          <>
+                      <td className="file-actions-td">
+                        <div className="file-actions">
+                          {isFolder(obj) ? (
                             <button
                               className="link-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handlePreview(obj);
+                                handleFolderClick(obj.name);
                               }}
                             >
-                              Preview
+                              Open
                             </button>
-                            <button
-                              className="link-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownload(obj);
-                              }}
-                            >
-                              Download
-                            </button>
-                          </>
-                        )}
+                          ) : (
+                            <>
+                              <button
+                                className="link-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePreview(obj);
+                                }}
+                              >
+                                Preview
+                              </button>
+                              <button
+                                className="link-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownload(obj);
+                                }}
+                              >
+                                Download
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

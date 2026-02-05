@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -687,12 +688,47 @@ func (s *OSSService) GetObjectText(config OSSConfig, bucket string, object strin
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	output, err := s.runOssutil(args...)
-	if err != nil {
-		return "", fmt.Errorf("read object failed: %s", ossutilOutputOrError(err, output))
+	runSplit := func(bin string, args ...string) ([]byte, []byte, error) {
+		cmd := exec.Command(bin, args...)
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return stdout.Bytes(), stderr.Bytes(), err
 	}
 
-	return string(output), nil
+	primary := strings.TrimSpace(s.ossutilPath)
+	fallback := strings.TrimSpace(s.defaultOssutilPath)
+	if primary == "" {
+		primary = fallback
+	}
+	if primary == "" {
+		primary = "ossutil"
+	}
+
+	stdout, stderr, err := runSplit(primary, args...)
+	if err != nil && ossutilStartFailed(err) && fallback != "" && fallback != primary {
+		// Retry with the auto-discovered ossutil path.
+		fallbackStdout, fallbackStderr, fallbackErr := runSplit(fallback, args...)
+		if fallbackErr == nil || !ossutilStartFailed(fallbackErr) {
+			s.ossutilPath = fallback
+			stdout, stderr, err = fallbackStdout, fallbackStderr, fallbackErr
+		}
+	}
+
+	if err != nil {
+		msg := strings.TrimSpace(string(stderr))
+		if msg == "" {
+			msg = strings.TrimSpace(string(stdout))
+		}
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("read object failed: %s", msg)
+	}
+
+	return string(stdout), nil
 }
 
 func (s *OSSService) PutObjectText(config OSSConfig, bucket string, object string, content string) error {

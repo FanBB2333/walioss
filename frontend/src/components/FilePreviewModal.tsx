@@ -199,6 +199,12 @@ function formatDuration(totalSeconds: number) {
   return `${m}:${pad(s)}`;
 }
 
+function formatElapsedMs(ms: number) {
+  if (!Number.isFinite(ms) || ms < 0) return '-';
+  const s = ms / 1000;
+  return `${s.toFixed(3)}(s) elapsed`;
+}
+
 interface FilePreviewModalProps {
   isOpen: boolean;
   config: main.OSSConfig;
@@ -218,6 +224,7 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   const [text, setText] = useState<string>('');
   const [originalText, setOriginalText] = useState<string>('');
   const [truncated, setTruncated] = useState(false);
+  const [loadElapsedMs, setLoadElapsedMs] = useState<number | null>(null);
   const [highlightHtml, setHighlightHtml] = useState<string>('');
   const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
   const [videoMeta, setVideoMeta] = useState<{ width: number; height: number; duration: number } | null>(null);
@@ -261,11 +268,13 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
     setText('');
     setOriginalText('');
     setTruncated(false);
+    setLoadElapsedMs(null);
     setHighlightHtml('');
     setImageResolution(null);
     setVideoMeta(null);
 
     const load = async () => {
+      const startedAt = performance.now();
       try {
         if (!fileKey) {
           setError('Invalid object path');
@@ -290,6 +299,7 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
       } catch (err: any) {
         setError(err?.message || 'Preview failed');
       } finally {
+        setLoadElapsedMs(performance.now() - startedAt);
         setLoading(false);
       }
     };
@@ -458,6 +468,12 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
                 <span className="meta-label">Type</span>
                 <span className="meta-value">{kindFromName === 'text' ? 'Text' : kindFromName === 'image' ? 'Image' : kindFromName === 'video' ? 'Video' : 'File'}</span>
               </div>
+              {loadElapsedMs !== null && (
+                <div className="meta-chip">
+                  <span className="meta-label">Elapsed</span>
+                  <span className="meta-value">{formatElapsedMs(loadElapsedMs)}</span>
+                </div>
+              )}
               {object.size > 0 && (
                 <div className="meta-chip">
                   <span className="meta-label">Size</span>
