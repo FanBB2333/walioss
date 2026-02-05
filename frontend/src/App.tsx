@@ -6,9 +6,10 @@ import AboutModal from './components/AboutModal';
 import FileBrowser from './components/FileBrowser';
 import TransferModal from './components/TransferModal';
 import { main } from '../wailsjs/go/models';
-import { GetSettings } from '../wailsjs/go/main/OSSService';
+import { GetSettings, MoveObject } from '../wailsjs/go/main/OSSService';
 import { GetAppInfo, OpenFile, OpenInFinder } from '../wailsjs/go/main/App';
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import { EventsEmit, EventsOn } from '../wailsjs/runtime/runtime';
+import { canReadOssDragPayload, readOssDragPayload } from './ossDrag';
 
 type GlobalView = 'session' | 'settings';
 
@@ -55,6 +56,9 @@ function App() {
   const [theme, setTheme] = useState<string>('dark');
   const [newTabNameRule, setNewTabNameRule] = useState<'folder' | 'newTab'>('folder');
   const nextTabNumber = useRef(2);
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
+  const tabHoverSwitchTimerRef = useRef<number | null>(null);
+  const tabHoverSwitchTargetRef = useRef<string | null>(null);
 
   const [sessionConfig, setSessionConfig] = useState<main.OSSConfig | null>(null);
   const [sessionProfileName, setSessionProfileName] = useState<string | null>(null);
@@ -126,6 +130,28 @@ function App() {
     const prefixPart = parts.slice(1).join('/');
     const prefix = prefixPart ? (prefixPart.endsWith('/') ? prefixPart : `${prefixPart}/`) : '';
     return { bucket, prefix };
+  };
+
+  const normalizeBucketName = (bucket: string) => bucket.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+
+  const normalizePrefix = (prefix: string) => {
+    let p = (prefix || '').trim().replace(/^\/+/, '');
+    if (!p) return '';
+    if (!p.endsWith('/')) p += '/';
+    return p;
+  };
+
+  const parseOssObjectPath = (path: string | undefined | null) => {
+    let p = (path || '').trim();
+    if (!p.startsWith('oss://')) return null;
+    p = p.slice(6);
+    p = p.replace(/^\/+/, '');
+    if (!p) return null;
+    const parts = p.split('/');
+    const bucket = normalizeBucketName(parts[0] || '');
+    if (!bucket) return null;
+    const key = parts.slice(1).join('/');
+    return { bucket, key };
   };
 
   const defaultTabTitleForRule = (rule: 'folder' | 'newTab', bucket: string, prefix: string) => {
@@ -252,6 +278,103 @@ function App() {
   const openTab = (tabId: string) => {
     setActiveTabId(tabId);
     setGlobalView('session');
+  };
+
+  const clearTabHoverSwitch = () => {
+    if (tabHoverSwitchTimerRef.current) {
+      window.clearTimeout(tabHoverSwitchTimerRef.current);
+    }
+    tabHoverSwitchTimerRef.current = null;
+    tabHoverSwitchTargetRef.current = null;
+  };
+
+  useEffect(() => {
+    return () => clearTabHoverSwitch();
+  }, []);
+
+  const handleTabDragEnter = (e: React.DragEvent, tabId: string) => {
+    if (!canReadOssDragPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    setDragOverTabId(tabId);
+
+    if (tabId === activeTabId) return;
+    clearTabHoverSwitch();
+    tabHoverSwitchTargetRef.current = tabId;
+    tabHoverSwitchTimerRef.current = window.setTimeout(() => {
+      if (tabHoverSwitchTargetRef.current === tabId) {
+        openTab(tabId);
+      }
+    }, 320);
+  };
+
+  const handleTabDragOver = (e: React.DragEvent, tabId: string) => {
+    if (!canReadOssDragPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTabId(tabId);
+  };
+
+  const handleTabDragLeave = (e: React.DragEvent, tabId: string) => {
+    const related = e.relatedTarget as Node | null;
+    if (related && e.currentTarget.contains(related)) return;
+    setDragOverTabId((prev) => (prev === tabId ? null : prev));
+    if (tabHoverSwitchTargetRef.current === tabId) {
+      clearTabHoverSwitch();
+    }
+  };
+
+  const handleTabDrop = async (e: React.DragEvent, tab: AppTab) => {
+    if (!sessionConfig) return;
+    const payload = readOssDragPayload(e.dataTransfer);
+    if (!payload || !payload.items.length) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    clearTabHoverSwitch();
+    setDragOverTabId(null);
+
+    const destBucket = normalizeBucketName(tab.bucket);
+    const destPrefix = normalizePrefix(tab.prefix);
+    if (!destBucket) {
+      showToast('error', 'Open a bucket first to move items into it.');
+      return;
+    }
+
+    try {
+      for (const item of payload.items) {
+        const parsed = parseOssObjectPath(item.path);
+        if (!parsed?.bucket) continue;
+
+        const srcBucket = parsed.bucket;
+        const srcKey = parsed.key;
+        const cleanName = (item.name || '').replace(/\/+$/, '');
+        const destKey = `${destPrefix || ''}${cleanName}${item.isFolder ? '/' : ''}`;
+
+        if (srcBucket === destBucket && srcKey === destKey) continue;
+
+        if (item.isFolder && srcBucket === destBucket) {
+          const srcKeyFolder = srcKey.endsWith('/') ? srcKey : `${srcKey}/`;
+          if (destKey.startsWith(srcKeyFolder)) {
+            throw new Error('Cannot move a folder into itself.');
+          }
+        }
+
+        await MoveObject(sessionConfig, srcBucket, srcKey, destBucket, destKey);
+      }
+
+      const sourceBucket = normalizeBucketName(payload.source?.bucket || '');
+      const sourcePrefix = normalizePrefix(payload.source?.prefix || '');
+      if (sourceBucket) {
+        EventsEmit('objects:changed', { bucket: sourceBucket, prefix: sourcePrefix }, { bucket: destBucket, prefix: destPrefix });
+      } else {
+        EventsEmit('objects:changed', { bucket: destBucket, prefix: destPrefix });
+      }
+
+      showToast('success', payload.items.length > 1 ? `Moved ${payload.items.length} items` : 'Moved 1 item');
+      openTab(tab.id);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Move failed');
+    }
   };
 
   const addTab = () => {
@@ -419,10 +542,14 @@ function App() {
                 {tabs.map((t, index) => (
                   <div
                     key={t.id}
-                    className={`window-tab ${t.id === activeTabId ? 'active' : ''}`}
+                    className={`window-tab ${t.id === activeTabId ? 'active' : ''} ${dragOverTabId === t.id ? 'drag-over' : ''}`}
                     role="button"
                     tabIndex={0}
                     onClick={() => openTab(t.id)}
+                    onDragEnter={(e) => handleTabDragEnter(e, t.id)}
+                    onDragOver={(e) => handleTabDragOver(e, t.id)}
+                    onDragLeave={(e) => handleTabDragLeave(e, t.id)}
+                    onDrop={(e) => void handleTabDrop(e, t)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();

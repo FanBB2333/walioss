@@ -6,6 +6,14 @@ export function CheckOssutilInstalled() {
   return window['go']['main']['OSSService']['CheckOssutilInstalled']();
 }
 
+export function CreateFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['OSSService']['CreateFile'](arg1, arg2, arg3, arg4);
+}
+
+export function CreateFolder(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['OSSService']['CreateFolder'](arg1, arg2, arg3, arg4);
+}
+
 export function DeleteObject(arg1, arg2, arg3) {
   return window['go']['main']['OSSService']['DeleteObject'](arg1, arg2, arg3);
 }
@@ -60,6 +68,10 @@ export function ListObjectsPage(arg1, arg2, arg3, arg4, arg5) {
 
 export function LoadProfiles() {
   return window['go']['main']['OSSService']['LoadProfiles']();
+}
+
+export function MoveObject(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['OSSService']['MoveObject'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function PresignObject(arg1, arg2, arg3, arg4) {

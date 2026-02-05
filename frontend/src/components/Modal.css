@@ -68,6 +68,38 @@
     margin-bottom: 24px;
 }
 
+.modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    color: #ffffff;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    outline: none;
+    margin-bottom: 18px;
+}
+
+.modal-input:focus {
+    border-color: rgba(79, 172, 254, 0.55);
+    box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.12);
+}
+
+.modal-input::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.modal-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.modal-input.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+}
+
 .modal-actions {
     display: flex;
     gap: 12px;
@@ -92,6 +124,25 @@
 .modal-btn-cancel:hover {
     background: rgba(255, 255, 255, 0.12);
     color: #ffffff;
+}
+
+.modal-btn-primary {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: #0f0c29;
+    font-weight: 700;
+    border: none;
+}
+
+.modal-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px -10px rgba(79, 172, 254, 0.55);
+}
+
+.modal-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .modal-btn-danger {
@@ -236,6 +287,21 @@ body.theme-light .modal-content {
 
 body.theme-light .modal-title {
     color: #0f172a;
+}
+
+body.theme-light .modal-input {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    color: #0f172a;
+}
+
+body.theme-light .modal-input:focus {
+    border-color: rgba(14, 165, 233, 0.6);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+
+body.theme-light .modal-input::placeholder {
+    color: rgba(15, 23, 42, 0.4);
 }
 
 body.theme-light .icon-close-btn {

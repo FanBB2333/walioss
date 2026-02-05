@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { main } from '../../wailsjs/go/models';
-import { DeleteObject, EnqueueDownload, EnqueueUpload, ListBuckets, ListObjectsPage } from '../../wailsjs/go/main/OSSService';
+import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueUpload, ListBuckets, ListObjectsPage, MoveObject } from '../../wailsjs/go/main/OSSService';
 import { SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
 import ConfirmationModal from './ConfirmationModal';
 import FilePreviewModal from './FilePreviewModal';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { EventsEmit, EventsOn } from '../../wailsjs/runtime/runtime';
+import { canReadOssDragPayload, OssDragPayload, readOssDragPayload, writeOssDragPayload } from '../ossDrag';
 import './FileBrowser.css';
 import './Modal.css';
 
@@ -15,9 +16,9 @@ interface FileBrowserProps {
   onLocationChange?: (location: { bucket: string; prefix: string }) => void;
 }
 
-// Columns: Name, Size, Type, Last Modified, Actions
-const DEFAULT_TABLE_COLUMN_WIDTHS = [440, 110, 120, 190, 200];
-const MIN_TABLE_COLUMN_WIDTHS = [180, 70, 80, 120, 160];
+// Columns: Select, Name, Size, Type, Last Modified, Actions
+const DEFAULT_TABLE_COLUMN_WIDTHS = [44, 440, 110, 120, 190, 200];
+const MIN_TABLE_COLUMN_WIDTHS = [44, 180, 70, 80, 120, 160];
 const DEFAULT_PAGE_SIZE = 200;
 
 const sumWidths = (widths: number[]) => widths.reduce((sum, w) => sum + w, 0);
@@ -25,6 +26,7 @@ const sumWidths = (widths: number[]) => widths.reduce((sum, w) => sum + w, 0);
 const fitWidthsToContainer = (widths: number[], targetWidth: number) => {
   if (!Number.isFinite(targetWidth) || targetWidth <= 0) return widths;
   if (widths.length !== MIN_TABLE_COLUMN_WIDTHS.length) return widths;
+  const stretchIndex = widths.length > 1 ? 1 : 0;
 
   const total = sumWidths(widths);
   if (!Number.isFinite(total) || total <= 0) return widths;
@@ -37,7 +39,7 @@ const fitWidthsToContainer = (widths: number[], targetWidth: number) => {
 
   let diff = targetWidth - sumWidths(next);
   if (diff > 0) {
-    next[0] += diff;
+    next[stretchIndex] += diff;
     return next;
   }
 
@@ -54,7 +56,7 @@ const fitWidthsToContainer = (widths: number[], targetWidth: number) => {
 
   const final = sumWidths(next);
   if (final !== targetWidth) {
-    next[0] = Math.max(MIN_TABLE_COLUMN_WIDTHS[0], next[0] + (targetWidth - final));
+    next[stretchIndex] = Math.max(MIN_TABLE_COLUMN_WIDTHS[stretchIndex], next[stretchIndex] + (targetWidth - final));
   }
 
   return next;
@@ -90,6 +92,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
   const [buckets, setBuckets] = useState<main.BucketInfo[]>([]);
   const [objects, setObjects] = useState<main.ObjectInfo[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
 
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [pageIndex, setPageIndex] = useState<number>(1);
@@ -106,6 +111,14 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
   
   // Modal State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTargets, setDeleteTargets] = useState<main.ObjectInfo[]>([]);
+  const [createFolderModalOpen, setCreateFolderModalOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [createFileModalOpen, setCreateFileModalOpen] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
+  const [moveDestValue, setMoveDestValue] = useState('');
+  const [moveTargets, setMoveTargets] = useState<main.ObjectInfo[]>([]);
   const [propertiesModalOpen, setPropertiesModalOpen] = useState(false);
   const [operationLoading, setOperationLoading] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -116,6 +129,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
   const [addressBarEditing, setAddressBarEditing] = useState(false);
   const [addressBarValue, setAddressBarValue] = useState('');
   const addressInputRef = useRef<HTMLInputElement>(null);
+  const createFolderInputRef = useRef<HTMLInputElement>(null);
+  const createFileInputRef = useRef<HTMLInputElement>(null);
+  const moveInputRef = useRef<HTMLInputElement>(null);
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [columnWidths, setColumnWidths] = useState<number[]>(() => {
@@ -177,10 +193,30 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
   }, [currentBucket, currentPrefix]);
 
   useEffect(() => {
+    setSelectedPaths(new Set());
+    setDropTargetPath(null);
+  }, [currentBucket, currentPrefix, pageIndex]);
+
+  useEffect(() => {
     if (!currentBucket) return;
     loadObjectsFirstPage(currentBucket, currentPrefix);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize]);
+
+  useEffect(() => {
+    if (!createFolderModalOpen) return;
+    setTimeout(() => createFolderInputRef.current?.focus(), 0);
+  }, [createFolderModalOpen]);
+
+  useEffect(() => {
+    if (!createFileModalOpen) return;
+    setTimeout(() => createFileInputRef.current?.focus(), 0);
+  }, [createFileModalOpen]);
+
+  useEffect(() => {
+    if (!moveModalOpen) return;
+    setTimeout(() => moveInputRef.current?.focus(), 0);
+  }, [moveModalOpen]);
 
   useEffect(() => {
     if (!tableVisible) return;
@@ -210,6 +246,18 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
   }, [tableVisible]);
 
   useEffect(() => {
+    const el = selectAllRef.current;
+    if (!el) return;
+    const total = objects.length;
+    if (total <= 0) {
+      el.indeterminate = false;
+      return;
+    }
+    const selected = objects.reduce((count, obj) => count + (obj.path && selectedPaths.has(obj.path) ? 1 : 0), 0);
+    el.indeterminate = selected > 0 && selected < total;
+  }, [objects, selectedPaths]);
+
+  useEffect(() => {
     if (!currentBucket) return;
     const off = EventsOn('transfer:update', (payload: any) => {
       const update = payload as any;
@@ -219,6 +267,24 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
       const marker = markerForPage(pageIndex);
       loadObjectsPage(currentBucket, currentPrefix, marker, pageIndex);
     });
+    return () => off();
+  }, [config, currentBucket, currentPrefix, pageIndex, pageMarkers, pageSize]);
+
+  useEffect(() => {
+    const off = EventsOn('objects:changed', (...args: any[]) => {
+      if (!currentBucket) return;
+      const currentPrefixNormalized = normalizePrefix(currentPrefix);
+
+      for (const payload of args) {
+        const bucket = normalizeBucketName(payload?.bucket || '');
+        const prefix = normalizePrefix(payload?.prefix || '');
+        if (bucket && bucket === currentBucket && prefix === currentPrefixNormalized) {
+          handleRefresh();
+          break;
+        }
+      }
+    });
+
     return () => off();
   }, [config, currentBucket, currentPrefix, pageIndex, pageMarkers, pageSize]);
 
@@ -645,6 +711,156 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
     });
   };
 
+  const parseObjectPath = (path: string) => {
+    let p = (path || '').trim();
+    if (!p.startsWith('oss://')) return null;
+    p = p.substring(6);
+    p = p.replace(/^\/+/, '');
+    if (!p) return null;
+
+    const parts = p.split('/');
+    const bucket = normalizeBucketName(parts[0] || '');
+    if (!bucket) return null;
+    const key = parts.slice(1).join('/');
+    return { bucket, key };
+  };
+
+  const objectNameForKey = (name: string) => (name || '').replace(/\/+$/, '');
+
+  const moveDragPayload = async (payload: OssDragPayload, destBucket: string, destPrefix: string) => {
+    if (!payload.items.length) return;
+    if (!destBucket) return;
+
+    const normalizedDestPrefix = normalizePrefix(destPrefix);
+    setOperationLoading(true);
+    try {
+      for (const item of payload.items) {
+        const parsed = parseObjectPath(item.path);
+        if (!parsed?.bucket) continue;
+        const srcBucket = parsed.bucket;
+        const srcKey = parsed.key;
+        const cleanName = objectNameForKey(item.name);
+        const destKey = `${normalizedDestPrefix || ''}${cleanName}${item.isFolder ? '/' : ''}`;
+
+        if (srcBucket === destBucket && srcKey === destKey) continue;
+
+        if (item.isFolder && srcBucket === destBucket) {
+          const srcKeyFolder = srcKey.endsWith('/') ? srcKey : `${srcKey}/`;
+          if (destKey.startsWith(srcKeyFolder)) {
+            throw new Error('Cannot move a folder into itself.');
+          }
+        }
+
+        await MoveObject(config, srcBucket, srcKey, destBucket, destKey);
+      }
+
+      const sourceBucket = normalizeBucketName(payload.source?.bucket || currentBucket);
+      const sourcePrefix = normalizePrefix(payload.source?.prefix || currentPrefix);
+      EventsEmit('objects:changed', { bucket: sourceBucket, prefix: sourcePrefix }, { bucket: destBucket, prefix: normalizedDestPrefix });
+
+      setSelectedPaths(new Set());
+      handleRefresh();
+    } catch (err: any) {
+      alert('Move failed: ' + (err?.message || String(err)));
+    } finally {
+      setOperationLoading(false);
+      setDropTargetPath(null);
+    }
+  };
+
+  const handleObjectDragStart = (e: React.DragEvent, obj: main.ObjectInfo) => {
+    if (operationLoading) {
+      e.preventDefault();
+      return;
+    }
+    if (!obj.path || !currentBucket) {
+      e.preventDefault();
+      return;
+    }
+
+    const objPath = obj.path;
+    const isSelected = selectedPaths.has(objPath);
+    const candidates = isSelected ? objects.filter((o) => !!o.path && selectedPaths.has(o.path)) : [obj];
+    const items = candidates
+      .filter((o) => !!o.path)
+      .map((o) => ({
+        path: o.path as string,
+        name: objectNameForKey(o.name),
+        isFolder: isFolder(o),
+      }));
+
+    if (items.length === 0) {
+      e.preventDefault();
+      return;
+    }
+
+    e.dataTransfer.effectAllowed = 'move';
+    writeOssDragPayload(e.dataTransfer, {
+      type: 'walioss-oss-objects',
+      source: { bucket: currentBucket, prefix: currentPrefix },
+      items,
+    });
+  };
+
+  const handleObjectDragEnd = () => {
+    setDropTargetPath(null);
+  };
+
+  const handleRowDragOver = (e: React.DragEvent, obj: main.ObjectInfo) => {
+    if (!isFolder(obj)) return;
+    if (!canReadOssDragPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleRowDragEnter = (e: React.DragEvent, obj: main.ObjectInfo) => {
+    if (!isFolder(obj) || !obj.path) return;
+    if (!canReadOssDragPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    setDropTargetPath(obj.path);
+  };
+
+  const handleRowDragLeave = (e: React.DragEvent, obj: main.ObjectInfo) => {
+    if (!isFolder(obj) || !obj.path) return;
+    const related = e.relatedTarget as Node | null;
+    if (related && e.currentTarget.contains(related)) return;
+    setDropTargetPath((prev) => (prev === obj.path ? null : prev));
+  };
+
+  const handleRowDrop = async (e: React.DragEvent, obj: main.ObjectInfo) => {
+    if (!currentBucket) return;
+    if (!isFolder(obj)) return;
+
+    const payload = readOssDragPayload(e.dataTransfer);
+    if (!payload) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const folderName = objectNameForKey(obj.name);
+    if (!folderName) return;
+
+    const destPrefix = normalizePrefix(`${currentPrefix}${folderName}`);
+    await moveDragPayload(payload, currentBucket, destPrefix);
+  };
+
+  const handleTableDragOver = (e: React.DragEvent) => {
+    if (!currentBucket) return;
+    if (!canReadOssDragPayload(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleTableDrop = (e: React.DragEvent) => {
+    if (!currentBucket) return;
+    const payload = readOssDragPayload(e.dataTransfer);
+    if (!payload) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    void moveDragPayload(payload, currentBucket, currentPrefix);
+  };
+
   const handlePreview = (obj?: main.ObjectInfo) => {
     const target = obj || contextMenu.object;
     if (!target || !currentBucket || isFolder(target)) return;
@@ -663,6 +879,135 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
     }
   };
 
+  const requestCreateFolder = () => {
+    if (!currentBucket) return;
+    setNewFolderName('');
+    setCreateFolderModalOpen(true);
+  };
+
+  const requestCreateFile = () => {
+    if (!currentBucket) return;
+    setNewFileName('');
+    setCreateFileModalOpen(true);
+  };
+
+  const confirmCreateFolder = async () => {
+    if (!currentBucket) return;
+    const name = newFolderName.trim();
+    if (!name) return;
+
+    setOperationLoading(true);
+    try {
+      await CreateFolder(config, currentBucket, currentPrefix, name);
+      setCreateFolderModalOpen(false);
+      setNewFolderName('');
+      EventsEmit('objects:changed', { bucket: currentBucket, prefix: currentPrefix });
+      handleRefresh();
+    } catch (err: any) {
+      alert('Create folder failed: ' + (err?.message || String(err)));
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const confirmCreateFile = async () => {
+    if (!currentBucket) return;
+    const rawName = newFileName.trim();
+    const cleanName = rawName.replace(/^\/+/, '').replace(/\/+$/, '');
+    if (!cleanName) return;
+
+    setOperationLoading(true);
+    try {
+      await CreateFile(config, currentBucket, currentPrefix, cleanName);
+      setCreateFileModalOpen(false);
+      setNewFileName('');
+      EventsEmit('objects:changed', { bucket: currentBucket, prefix: currentPrefix });
+      handleRefresh();
+
+      const key = `${normalizePrefix(currentPrefix)}${cleanName}`;
+      const displayName = cleanName.split('/').filter(Boolean).pop() || cleanName;
+      setPreviewObject({
+        name: displayName,
+        path: `oss://${currentBucket}/${key}`,
+        size: 0,
+        type: 'File',
+        lastModified: '',
+        storageClass: '',
+      });
+      setPreviewModalOpen(true);
+    } catch (err: any) {
+      alert('Create file failed: ' + (err?.message || String(err)));
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const parseMoveDestination = (value: string) => {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return null;
+
+    if (trimmed.startsWith('oss://')) {
+      let pathToParse = trimmed.substring(6);
+      pathToParse = pathToParse.replace(/^\/+/, '');
+      if (!pathToParse) return null;
+      const parts = pathToParse.split('/');
+      const bucket = normalizeBucketName(parts[0] || '');
+      if (!bucket) return null;
+      const prefix = normalizePrefix(parts.slice(1).filter(Boolean).join('/'));
+      return { bucket, prefix };
+    }
+
+    if (!currentBucket) return null;
+
+    if (trimmed.startsWith('/')) {
+      const prefix = normalizePrefix(trimmed.replace(/^\/+/, ''));
+      return { bucket: currentBucket, prefix };
+    }
+
+    const prefix = normalizePrefix(`${currentPrefix || ''}${trimmed}`);
+    return { bucket: currentBucket, prefix };
+  };
+
+  const requestMoveTo = (targets: main.ObjectInfo[]) => {
+    if (!targets.length) return;
+    setMoveTargets(targets);
+    setMoveDestValue(getCurrentOssPath());
+    setMoveModalOpen(true);
+  };
+
+  const confirmMoveTo = async () => {
+    if (!moveTargets.length) return;
+    const dest = parseMoveDestination(moveDestValue);
+    if (!dest?.bucket) {
+      alert('Invalid destination path');
+      return;
+    }
+
+    setOperationLoading(true);
+    try {
+      for (const obj of moveTargets) {
+        const parsed = parseObjectPath(obj.path);
+        if (!parsed?.bucket) continue;
+        const srcBucket = parsed.bucket;
+        const srcKey = parsed.key;
+        const folder = isFolder(obj) || srcKey.endsWith('/');
+        const destKey = `${dest.prefix || ''}${objectNameForKey(obj.name)}${folder ? '/' : ''}`;
+        await MoveObject(config, srcBucket, srcKey, dest.bucket, destKey);
+      }
+
+      setMoveModalOpen(false);
+      setMoveTargets([]);
+      setMoveDestValue('');
+      setSelectedPaths(new Set());
+      EventsEmit('objects:changed', { bucket: currentBucket, prefix: currentPrefix }, { bucket: dest.bucket, prefix: dest.prefix });
+      handleRefresh();
+    } catch (err: any) {
+      alert('Move failed: ' + (err?.message || String(err)));
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
   const handleDownload = async (target?: main.ObjectInfo) => {
     const obj = target || contextMenu.object;
     if (!obj || isFolder(obj) || !currentBucket) return;
@@ -677,23 +1022,34 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
     }
   };
 
-  const handleDeleteClick = () => {
+  const requestDelete = (targets: main.ObjectInfo[]) => {
+    if (!targets.length) return;
+    setDeleteTargets(targets);
     setDeleteModalOpen(true);
+    setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+  };
+
+  const handleDeleteClick = () => {
+    const obj = contextMenu.object;
+    if (!obj) return;
+    requestDelete([obj]);
   };
 
   const confirmDelete = async () => {
-    const obj = contextMenu.object;
-    if (!obj) return;
+    if (!deleteTargets.length) return;
 
     setOperationLoading(true);
     try {
-      // Construct key from Path
-       const fullKey = obj.path.substring(`oss://${currentBucket}/`.length);
-       
-      await DeleteObject(config, currentBucket, fullKey);
+      for (const obj of deleteTargets) {
+        const parsed = parseObjectPath(obj.path);
+        if (!parsed?.bucket) continue;
+        await DeleteObject(config, parsed.bucket, parsed.key);
+      }
       setDeleteModalOpen(false);
-      const marker = markerForPage(pageIndex);
-      loadObjectsPage(currentBucket, currentPrefix, marker, pageIndex); // Refresh
+      setDeleteTargets([]);
+      setSelectedPaths(new Set());
+      EventsEmit('objects:changed', { bucket: currentBucket, prefix: currentPrefix });
+      handleRefresh();
     } catch (err: any) {
       alert("Delete failed: " + err.message);
     } finally {
@@ -767,8 +1123,8 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
     return guessType(obj.name, obj.type || 'File');
   };
 
-  const renderBreadcrumbs = () => {
-    const crumbs = [];
+	  const renderBreadcrumbs = () => {
+	    const crumbs = [];
     const isRootActive = !currentBucket;
     crumbs.push(
       <span 
@@ -826,13 +1182,17 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
         });
       }
     }
-    return crumbs;
-  };
+	    return crumbs;
+	  };
 
-  return (
-    <div className="file-browser">
-      <div className="browser-header">
-        <div className="nav-controls">
+	  const selectedObjects = objects.filter((obj) => !!obj.path && selectedPaths.has(obj.path));
+	  const selectedCount = selectedObjects.length;
+	  const allSelectedOnPage = objects.length > 0 && selectedCount === objects.length;
+
+	  return (
+	    <div className="file-browser">
+	      <div className="browser-header">
+	        <div className="nav-controls">
           <div className="bookmark-toggle">
             <button
               className={`bookmark-icon-btn ${isCurrentBookmarked ? 'active' : ''}`}
@@ -912,9 +1272,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
           <button className="nav-btn" onClick={handleGoUp} disabled={!currentBucket} title="Up">↑</button>
           <button className="nav-btn" onClick={handleRefresh} disabled={loading} title="Refresh">↻</button>
         </div>
-        <div className="breadcrumbs" onClick={!addressBarEditing ? handleAddressBarClick : undefined}>
-          {addressBarEditing ? (
-            <input
+	        <div className="breadcrumbs" onClick={!addressBarEditing ? handleAddressBarClick : undefined}>
+	          {addressBarEditing ? (
+	            <input
               ref={addressInputRef}
               type="text"
               className="address-input"
@@ -925,19 +1285,52 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
               placeholder="oss://bucket/path/"
               autoFocus
             />
-          ) : (
-            renderBreadcrumbs()
-          )}
-        </div>
-        <div className="header-actions">
-          <button className="nav-btn" onClick={handleUpload} disabled={!currentBucket} title="Upload File">
-            Upload
-          </button>
-        </div>
-      </div>
+	          ) : (
+	            renderBreadcrumbs()
+	          )}
+	        </div>
+	      </div>
 
-      <div className="browser-content">
-        {loading ? (
+	      {currentBucket && (
+	        <div className="browser-actions-bar">
+	          <div className="browser-actions-left">
+	            <div className={`selection-pill ${selectedCount > 0 ? 'active' : ''}`}>
+	              <span className="selection-label">{selectedCount > 0 ? `${selectedCount} selected` : 'No selection'}</span>
+	              {selectedCount > 0 && (
+	                <button className="mini-link" type="button" onClick={() => setSelectedPaths(new Set())}>
+	                  Clear
+	                </button>
+	              )}
+	            </div>
+	          </div>
+	          <div className="browser-actions-right">
+	            <button className="action-btn" type="button" onClick={handleUpload} title="Upload File">
+	              Upload
+	            </button>
+	            <button className="action-btn" type="button" onClick={requestCreateFolder} title="New Folder">
+	              New Folder
+	            </button>
+	            <button className="action-btn" type="button" onClick={requestCreateFile} title="New File">
+	              New File
+	            </button>
+	            <button className="action-btn" type="button" onClick={() => requestMoveTo(selectedObjects)} disabled={selectedCount === 0} title="Move To">
+	              Move To
+	            </button>
+	            <button
+	              className="action-btn danger"
+	              type="button"
+	              onClick={() => requestDelete(selectedObjects)}
+	              disabled={selectedCount === 0}
+	              title="Delete"
+	            >
+	              Delete
+	            </button>
+	          </div>
+	        </div>
+	      )}
+
+	      <div className="browser-content">
+	        {loading ? (
           <div className="loading-container">
             <div className="loading-spinner"></div>
             <p>Loading...</p>
@@ -986,49 +1379,103 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
                 <p>Folder is empty.</p>
              </div>
 	          ) : (
-	            <div className="file-table-container" ref={tableContainerRef}>
+	            <div className="file-table-container" ref={tableContainerRef} onDragOver={handleTableDragOver} onDrop={handleTableDrop}>
 	              <div className="file-table-scroll">
 	                <table className="file-table">
 	                  <colgroup>
 	                    {columnWidths.map((w, i) => (
 	                      <col key={i} style={{ width: `${w}px` }} />
 	                    ))}
-	                  </colgroup>
-	                  <thead>
-	                    <tr>
-	                      <th className="resizable">
-	                        <span className="th-label">Name</span>
-	                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(0, e)} />
-	                      </th>
-	                      <th className="resizable">
-	                        <span className="th-label">Size</span>
-	                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(1, e)} />
-	                      </th>
-	                      <th className="resizable">
-	                        <span className="th-label">Type</span>
-	                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(2, e)} />
-	                      </th>
-	                      <th className="resizable">
-	                        <span className="th-label">Last Modified</span>
-	                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(3, e)} />
-	                      </th>
-	                      <th>
-	                        <span className="th-label">Actions</span>
-	                      </th>
-	                    </tr>
-	                  </thead>
-	                  <tbody>
-	                    {objects.map((obj) => (
-	                      <tr
-	                        key={obj.path || obj.name}
-	                        onClick={() => (isFolder(obj) ? handleFolderClick(obj.name) : handlePreview(obj))}
-	                        onContextMenu={(e) => handleContextMenu(e, obj)}
-	                      >
-	                        <td className="file-name-td">
-	                          <div className="file-name-cell">
-	                            <div className={`file-icon ${isFolder(obj) ? 'folder-icon' : 'item-icon'}`}>
-	                               {isFolder(obj) ? (
-	                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+		                  </colgroup>
+		                  <thead>
+		                    <tr>
+		                      <th className="select-col">
+		                        <input
+		                          ref={selectAllRef}
+		                          type="checkbox"
+		                          className="row-checkbox"
+		                          checked={allSelectedOnPage}
+		                          onClick={(e) => e.stopPropagation()}
+		                          onChange={(e) => {
+		                            const checked = e.target.checked;
+		                            setSelectedPaths((prev) => {
+		                              const next = new Set(prev);
+		                              for (const obj of objects) {
+		                                if (!obj.path) continue;
+		                                if (checked) next.add(obj.path);
+		                                else next.delete(obj.path);
+		                              }
+		                              return next;
+		                            });
+		                          }}
+		                          aria-label="Select all"
+		                          title="Select all"
+		                        />
+		                      </th>
+		                      <th className="resizable">
+		                        <span className="th-label">Name</span>
+		                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(1, e)} />
+		                      </th>
+		                      <th className="resizable">
+		                        <span className="th-label">Size</span>
+		                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(2, e)} />
+		                      </th>
+		                      <th className="resizable">
+		                        <span className="th-label">Type</span>
+		                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(3, e)} />
+		                      </th>
+		                      <th className="resizable">
+		                        <span className="th-label">Last Modified</span>
+		                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(4, e)} />
+		                      </th>
+		                      <th>
+		                        <span className="th-label">Actions</span>
+		                      </th>
+		                    </tr>
+		                  </thead>
+		                  <tbody>
+		                    {objects.map((obj) => (
+		                      <tr
+		                        key={obj.path || obj.name}
+		                        className={`${obj.path && selectedPaths.has(obj.path) ? 'selected' : ''} ${dropTargetPath && obj.path === dropTargetPath ? 'drop-target' : ''}`.trim()}
+		                        onClick={() => (isFolder(obj) ? handleFolderClick(obj.name) : handlePreview(obj))}
+		                        onContextMenu={(e) => handleContextMenu(e, obj)}
+		                        onDragOver={(e) => handleRowDragOver(e, obj)}
+		                        onDragEnter={(e) => handleRowDragEnter(e, obj)}
+		                        onDragLeave={(e) => handleRowDragLeave(e, obj)}
+		                        onDrop={(e) => void handleRowDrop(e, obj)}
+		                      >
+		                        <td className="select-col">
+		                          <input
+		                            type="checkbox"
+		                            className="row-checkbox"
+		                            checked={!!obj.path && selectedPaths.has(obj.path)}
+		                            onClick={(e) => e.stopPropagation()}
+		                            onChange={(e) => {
+		                              if (!obj.path) return;
+		                              const checked = e.target.checked;
+		                              setSelectedPaths((prev) => {
+		                                const next = new Set(prev);
+		                                if (checked) next.add(obj.path);
+		                                else next.delete(obj.path);
+		                                return next;
+		                              });
+		                            }}
+		                            aria-label={`Select ${obj.name}`}
+		                            title="Select"
+		                          />
+		                        </td>
+		                        <td className="file-name-td">
+		                          <div
+		                            className="file-name-cell"
+		                            draggable={!!obj.path && !operationLoading}
+		                            onDragStart={(e) => handleObjectDragStart(e, obj)}
+		                            onDragEnd={handleObjectDragEnd}
+		                            title="Drag to move"
+		                          >
+		                            <div className={`file-icon ${isFolder(obj) ? 'folder-icon' : 'item-icon'}`}>
+		                               {isFolder(obj) ? (
+		                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
 	                                   <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
 	                                 </svg>
 	                               ) : (
@@ -1137,11 +1584,11 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
 	        )}
       </div>
 
-      {contextMenu.visible && (
-        <div 
-          className="context-menu" 
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
+	      {contextMenu.visible && (
+	        <div 
+	          className="context-menu" 
+	          style={{ top: contextMenu.y, left: contextMenu.x }}
+	        >
           {contextMenu.object && isFolder(contextMenu.object) && (
             <div className="context-menu-item" onClick={handleOpenFolder}>
               <span className="context-menu-icon">
@@ -1197,14 +1644,125 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
               </svg>
             </span>
             Delete
-          </div>
-        </div>
-      )}
+	          </div>
+	        </div>
+	      )}
 
-      <FilePreviewModal
-        isOpen={previewModalOpen}
-        config={config}
-        bucket={currentBucket}
+	      {createFolderModalOpen && (
+	        <div className="modal-overlay" onClick={() => setCreateFolderModalOpen(false)}>
+	          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+	            <div className="modal-header">
+	              <h3 className="modal-title">New Folder</h3>
+	            </div>
+	            <p className="modal-description">Create a folder under the current path.</p>
+	            <input
+	              ref={createFolderInputRef}
+	              className="modal-input"
+	              type="text"
+	              value={newFolderName}
+	              onChange={(e) => setNewFolderName(e.target.value)}
+	              onKeyDown={(e) => {
+	                if (e.key === 'Enter') void confirmCreateFolder();
+	                if (e.key === 'Escape') setCreateFolderModalOpen(false);
+	              }}
+	              placeholder="Folder name"
+	              disabled={operationLoading}
+	            />
+	            <div className="modal-actions">
+	              <button className="modal-btn modal-btn-cancel" type="button" onClick={() => setCreateFolderModalOpen(false)} disabled={operationLoading}>
+	                Cancel
+	              </button>
+	              <button
+	                className="modal-btn modal-btn-primary"
+	                type="button"
+	                onClick={() => void confirmCreateFolder()}
+	                disabled={operationLoading || !newFolderName.trim()}
+	              >
+	                {operationLoading ? 'Creating…' : 'Create'}
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      {createFileModalOpen && (
+	        <div className="modal-overlay" onClick={() => setCreateFileModalOpen(false)}>
+	          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+	            <div className="modal-header">
+	              <h3 className="modal-title">New File</h3>
+	            </div>
+	            <p className="modal-description">Create an empty file under the current path.</p>
+	            <input
+	              ref={createFileInputRef}
+	              className="modal-input"
+	              type="text"
+	              value={newFileName}
+	              onChange={(e) => setNewFileName(e.target.value)}
+	              onKeyDown={(e) => {
+	                if (e.key === 'Enter') void confirmCreateFile();
+	                if (e.key === 'Escape') setCreateFileModalOpen(false);
+	              }}
+	              placeholder="File name (e.g. README.md)"
+	              disabled={operationLoading}
+	            />
+	            <div className="modal-actions">
+	              <button className="modal-btn modal-btn-cancel" type="button" onClick={() => setCreateFileModalOpen(false)} disabled={operationLoading}>
+	                Cancel
+	              </button>
+	              <button
+	                className="modal-btn modal-btn-primary"
+	                type="button"
+	                onClick={() => void confirmCreateFile()}
+	                disabled={operationLoading || !newFileName.trim()}
+	              >
+	                {operationLoading ? 'Creating…' : 'Create'}
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      {moveModalOpen && (
+	        <div className="modal-overlay" onClick={() => setMoveModalOpen(false)}>
+	          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+	            <div className="modal-header">
+	              <h3 className="modal-title">Move To</h3>
+	            </div>
+	            <p className="modal-description">Destination folder (supports `oss://bucket/path/`, `/path/` or `relative/path/`).</p>
+	            <input
+	              ref={moveInputRef}
+	              className="modal-input mono"
+	              type="text"
+	              value={moveDestValue}
+	              onChange={(e) => setMoveDestValue(e.target.value)}
+	              onKeyDown={(e) => {
+	                if (e.key === 'Enter') void confirmMoveTo();
+	                if (e.key === 'Escape') setMoveModalOpen(false);
+	              }}
+	              placeholder="oss://bucket/path/"
+	              disabled={operationLoading}
+	            />
+	            <div className="modal-actions">
+	              <button className="modal-btn modal-btn-cancel" type="button" onClick={() => setMoveModalOpen(false)} disabled={operationLoading}>
+	                Cancel
+	              </button>
+	              <button
+	                className="modal-btn modal-btn-primary"
+	                type="button"
+	                onClick={() => void confirmMoveTo()}
+	                disabled={operationLoading || !moveDestValue.trim()}
+	              >
+	                {operationLoading ? 'Moving…' : 'Move'}
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      <FilePreviewModal
+	        isOpen={previewModalOpen}
+	        config={config}
+	        bucket={currentBucket}
         object={previewObject}
         onClose={() => setPreviewModalOpen(false)}
         onDownload={(obj) => handleDownload(obj)}
@@ -1257,14 +1815,21 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
         </div>
       )}
 
-      <ConfirmationModal
-        isOpen={deleteModalOpen}
-        title="Delete Object"
-        description={`Are you sure you want to delete "${contextMenu.object?.name}"?`}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteModalOpen(false)}
-        isLoading={operationLoading}
-      />
+	      <ConfirmationModal
+	        isOpen={deleteModalOpen}
+	        title={deleteTargets.length > 1 ? `Delete ${deleteTargets.length} items` : 'Delete Object'}
+	        description={
+	          deleteTargets.length > 1
+	            ? `Are you sure you want to delete ${deleteTargets.length} items?`
+	            : `Are you sure you want to delete "${deleteTargets[0]?.name || ''}"?`
+	        }
+	        onConfirm={confirmDelete}
+	        onCancel={() => {
+	          setDeleteModalOpen(false);
+	          setDeleteTargets([]);
+	        }}
+	        isLoading={operationLoading}
+	      />
     </div>
   );
 }

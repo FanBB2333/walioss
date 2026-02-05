@@ -282,6 +282,13 @@ body.theme-light .dashboard-container::after {
     z-index: 2;
 }
 
+.window-tab.drag-over {
+    background: rgba(79, 172, 254, 0.16);
+    border-color: rgba(79, 172, 254, 0.5);
+    color: #ffffff;
+    box-shadow: 0 0 0 1px rgba(79, 172, 254, 0.28);
+}
+
 .window-tab.active .window-tab-number {
     background: rgba(79, 172, 254, 0.2);
     border-color: rgba(79, 172, 254, 0.4);
@@ -734,6 +741,13 @@ body.theme-light .window-tab.active {
     background: rgba(255, 255, 255, 0.9);
     border-color: rgba(15, 23, 42, 0.16);
     color: #0f172a;
+}
+
+body.theme-light .window-tab.drag-over {
+    background: rgba(79, 172, 254, 0.16);
+    border-color: rgba(79, 172, 254, 0.35);
+    color: #0f172a;
+    box-shadow: 0 0 0 1px rgba(79, 172, 254, 0.18);
 }
 
 body.theme-light .window-panel.active {

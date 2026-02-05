@@ -5,6 +5,10 @@ import {context} from '../models';
 
 export function CheckOssutilInstalled():Promise<main.ConnectionResult>;
 
+export function CreateFile(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function CreateFolder(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function DeleteObject(arg1:main.OSSConfig,arg2:string,arg3:string):Promise<void>;
 
 export function DeleteProfile(arg1:string):Promise<void>;
@@ -32,6 +36,8 @@ export function ListObjects(arg1:main.OSSConfig,arg2:string,arg3:string):Promise
 export function ListObjectsPage(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string,arg5:number):Promise<main.ObjectListPageResult>;
 
 export function LoadProfiles():Promise<Array<main.OSSProfile>>;
+
+export function MoveObject(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function PresignObject(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<string>;
 
