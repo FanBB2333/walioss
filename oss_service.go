@@ -196,12 +196,47 @@ func (s *OSSService) GetOssutilPath() string {
 	return s.ossutilPath
 }
 
+func parseDefaultPathLocation(path string) (string, string, bool) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", "", false
+	}
+
+	trimmed = strings.TrimPrefix(trimmed, "oss://")
+	trimmed = strings.TrimLeft(trimmed, "/")
+	if trimmed == "" {
+		return "", "", false
+	}
+
+	parts := strings.SplitN(trimmed, "/", 2)
+	bucket := strings.TrimSpace(parts[0])
+	bucket = strings.Trim(bucket, "/")
+	if bucket == "" {
+		return "", "", false
+	}
+
+	if len(parts) < 2 {
+		return bucket, "", true
+	}
+
+	prefix := strings.TrimSpace(parts[1])
+	prefix = strings.TrimLeft(prefix, "/")
+	if prefix == "" {
+		return bucket, "", true
+	}
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	return bucket, prefix, true
+}
+
 // TestConnection tests the OSS connection with given config
 func (s *OSSService) TestConnection(config OSSConfig) ConnectionResult {
 	region := normalizeRegion(config.Region)
 	endpoint := normalizeEndpoint(config.Endpoint)
 
-	if endpoint != "" && isAccessPointEndpoint(endpoint) {
+	defaultBucket, defaultPrefix, hasDefaultLocation := parseDefaultPathLocation(config.DefaultPath)
+	if endpoint != "" && isAccessPointEndpoint(endpoint) && !hasDefaultLocation {
 		return ConnectionResult{
 			Success: false,
 			Message: fmt.Sprintf(
@@ -213,12 +248,18 @@ func (s *OSSService) TestConnection(config OSSConfig) ConnectionResult {
 	}
 
 	// Build ossutil command with credentials
-	args := []string{
-		"ls",
+	args := []string{"ls"}
+
+	if hasDefaultLocation {
+		args = append(args, fmt.Sprintf("oss://%s/%s", defaultBucket, defaultPrefix))
+	}
+
+	args = append(
+		args,
 		"--access-key-id", config.AccessKeyID,
 		"--access-key-secret", config.AccessKeySecret,
 		"--region", region,
-	}
+	)
 
 	if endpoint != "" {
 		args = append(args, "--endpoint", endpoint)
@@ -229,7 +270,7 @@ func (s *OSSService) TestConnection(config OSSConfig) ConnectionResult {
 	if err != nil {
 		return ConnectionResult{
 			Success: false,
-			Message: fmt.Sprintf("Connection failed: %s\n%s", err.Error(), string(output)),
+			Message: fmt.Sprintf("Connection failed: %s", ossutilOutputOrError(err, output)),
 		}
 	}
 
