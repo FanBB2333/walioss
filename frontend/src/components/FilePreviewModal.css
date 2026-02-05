@@ -78,6 +78,27 @@
     min-width: 0;
 }
 
+.preview-path-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.preview-path-btn:hover {
+    text-decoration: underline;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.preview-path-btn[data-copy-state="copied"] {
+    color: rgba(16, 185, 129, 0.95);
+}
+
+.preview-path-btn[data-copy-state="failed"] {
+    color: rgba(239, 68, 68, 0.95);
+}
+
 .preview-size {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.55);
@@ -369,6 +390,10 @@ body.theme-light .preview-name {
 
 body.theme-light .preview-path {
     color: rgba(15, 23, 42, 0.55);
+}
+
+body.theme-light .preview-path-btn:hover {
+    color: rgba(15, 23, 42, 0.75);
 }
 
 body.theme-light .meta-chip {

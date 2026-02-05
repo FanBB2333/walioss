@@ -37,6 +37,9 @@ type TransferItem = {
   finishedAtMs?: number;
 };
 
+type ToastType = 'success' | 'error' | 'info';
+type Toast = { id: number; type: ToastType; message: string };
+
 function App() {
   const [globalView, setGlobalView] = useState<GlobalView>('session');
   const [theme, setTheme] = useState<string>('dark');
@@ -54,6 +57,8 @@ function App() {
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [showTransfers, setShowTransfers] = useState<boolean>(false);
   const [transferView, setTransferView] = useState<TransferType>('download');
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
@@ -80,6 +85,25 @@ function App() {
       }
     };
     applySavedTheme();
+  }, []);
+
+  const showToast = (type: ToastType, message: string, timeoutMs = 2600) => {
+    const id = Date.now();
+    setToast({ id, type, message });
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast((prev) => (prev?.id === id ? null : prev));
+    }, timeoutMs);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -340,6 +364,7 @@ function App() {
           isOpen={globalView === 'settings'}
           onBack={() => setGlobalView('session')}
           onThemeChange={handleThemeChange}
+          onNotify={(t) => showToast(t.type, t.message)}
         />
         <TransferModal
           isOpen={showTransfers}
@@ -350,6 +375,20 @@ function App() {
           onReveal={(p) => OpenInFinder(p)}
           onOpen={(p) => OpenFile(p)}
         />
+        {toast && (
+          <div className={`toast toast-${toast.type}`} role="status">
+            <div className="toast-message">{toast.message}</div>
+            <button
+              className="toast-close"
+              type="button"
+              aria-label="Dismiss notification"
+              title="Dismiss"
+              onClick={() => setToast(null)}
+            >
+              ×
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

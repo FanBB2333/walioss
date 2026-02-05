@@ -113,6 +113,7 @@
 
 .nav-controls {
     display: flex;
+    align-items: center;
     gap: 8px;
 }
 
@@ -279,10 +280,17 @@
     gap: 4px;
     overflow-x: auto;
     white-space: nowrap;
-    padding-right: 18px;
+    padding-right: 0;
     scrollbar-width: thin;
     cursor: text;
     flex: 1;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
 .crumb {

@@ -225,11 +225,13 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   const [originalText, setOriginalText] = useState<string>('');
   const [truncated, setTruncated] = useState(false);
   const [loadElapsedMs, setLoadElapsedMs] = useState<number | null>(null);
+  const [pathCopyState, setPathCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [highlightHtml, setHighlightHtml] = useState<string>('');
   const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
   const [videoMeta, setVideoMeta] = useState<{ width: number; height: number; duration: number } | null>(null);
   const highlightLayerRef = useRef<HTMLPreElement>(null);
   const editorInputRef = useRef<HTMLTextAreaElement>(null);
+  const pathCopyTimerRef = useRef<number | null>(null);
 
   const fileKey = useMemo(() => {
     if (!object?.path || !bucket) return '';
@@ -277,6 +279,7 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
     setOriginalText('');
     setTruncated(false);
     setLoadElapsedMs(null);
+    setPathCopyState('idle');
     setHighlightHtml('');
     setImageResolution(null);
     setVideoMeta(null);
@@ -316,6 +319,14 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
   }, [bucket, canEditText, config, fileKey, isOpen, kindFromName, object]);
 
   useEffect(() => {
+    return () => {
+      if (pathCopyTimerRef.current) {
+        window.clearTimeout(pathCopyTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -326,6 +337,20 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, requestClose]);
+
+  const handleCopyPath = async () => {
+    if (!object?.path) return;
+    try {
+      await navigator.clipboard.writeText(object.path);
+      setPathCopyState('copied');
+    } catch {
+      setPathCopyState('failed');
+    }
+    if (pathCopyTimerRef.current) {
+      window.clearTimeout(pathCopyTimerRef.current);
+    }
+    pathCopyTimerRef.current = window.setTimeout(() => setPathCopyState('idle'), 1200);
+  };
 
   useEffect(() => {
     if (!isOpen || kind !== 'text') return;
@@ -471,9 +496,15 @@ export default function FilePreviewModal({ isOpen, config, bucket, object, onClo
               {object.name}
             </div>
             <div className="preview-subtitle">
-              <span className="preview-path" title={object.path}>
+              <button
+                className="preview-path preview-path-btn"
+                type="button"
+                onClick={handleCopyPath}
+                data-copy-state={pathCopyState}
+                title={pathCopyState === 'copied' ? 'Copied' : 'Click to copy'}
+              >
                 {object.path}
-              </span>
+              </button>
             </div>
             <div className="preview-meta">
               <div className="meta-chip">

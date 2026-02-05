@@ -8,9 +8,10 @@ interface SettingsProps {
   isOpen: boolean;
   onBack: () => void;
   onThemeChange?: (theme: string) => void;
+  onNotify?: (toast: { type: 'success' | 'error' | 'info'; message: string }) => void;
 }
 
-function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
+function Settings({ isOpen, onBack, onThemeChange, onNotify }: SettingsProps) {
   const [settings, setSettings] = useState<main.AppSettings>({
     ossutilPath: '',
     defaultRegion: '',
@@ -20,7 +21,6 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
   } as main.AppSettings);
   
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -46,7 +46,7 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
         onThemeChange(loaded?.theme || 'dark');
       }
     } catch (err: any) {
-      setMessage({ type: 'error', text: 'Failed to load settings' });
+      onNotify?.({ type: 'error', message: 'Failed to load settings' });
     }
   };
 
@@ -59,15 +59,15 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
 
   const handleSave = async () => {
     setLoading(true);
-    setMessage(null);
     try {
       await SaveSettings(settings);
-      setMessage({ type: 'success', text: 'Settings saved successfully' });
       if (onThemeChange) {
         onThemeChange(settings.theme);
       }
+      onNotify?.({ type: 'success', message: 'Settings saved' });
+      onBack();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to save settings' });
+      onNotify?.({ type: 'error', message: err.message || 'Failed to save settings' });
     } finally {
       setLoading(false);
     }
@@ -75,7 +75,6 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
 
   const handleTestOssutil = async () => {
     setLoading(true);
-    setMessage(null);
     let originalPath: string | null = null;
     try {
       originalPath = await GetOssutilPath();
@@ -83,12 +82,12 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
 
       const result = await CheckOssutilInstalled();
       if (result.success) {
-        setMessage({ type: 'success', text: `ossutil found: ${result.message}` });
+        onNotify?.({ type: 'success', message: `ossutil found: ${result.message}` });
       } else {
-        setMessage({ type: 'error', text: result.message });
+        onNotify?.({ type: 'error', message: result.message });
       }
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Test failed' });
+      onNotify?.({ type: 'error', message: err.message || 'Test failed' });
     } finally {
       if (originalPath !== null) {
         try {
@@ -216,12 +215,6 @@ function Settings({ isOpen, onBack, onThemeChange }: SettingsProps) {
         >
           {loading ? 'Saving...' : 'Save Settings'}
         </button>
-
-        {message && (
-          <div className={`message ${message.type}`}>
-            {message.text}
-          </div>
-        )}
       </div>
         </div>
       </div>

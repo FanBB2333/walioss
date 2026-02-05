@@ -65,6 +65,11 @@ type Bookmark = {
   label: string;
 };
 
+type NavLocation = {
+  bucket: string;
+  prefix: string;
+};
+
 interface ContextMenuState {
   visible: boolean;
   x: number;
@@ -75,6 +80,10 @@ interface ContextMenuState {
 function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
   const [currentBucket, setCurrentBucket] = useState('');
   const [currentPrefix, setCurrentPrefix] = useState('');
+  const [navState, setNavState] = useState<{ stack: NavLocation[]; index: number }>({
+    stack: [{ bucket: '', prefix: '' }],
+    index: 0,
+  });
   
   const [buckets, setBuckets] = useState<main.BucketInfo[]>([]);
   const [objects, setObjects] = useState<main.ObjectInfo[]>([]);
@@ -233,33 +242,73 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
     }
   };
 
+  const navigateTo = (bucket: string, prefix: string, opts?: { pushHistory?: boolean }) => {
+    const normalizedBucket = normalizeBucketName(bucket);
+    const normalizedPrefix = normalizedBucket ? normalizePrefix(prefix) : '';
+
+    if (!normalizedBucket) {
+      setCurrentBucket('');
+      setCurrentPrefix('');
+      setObjects([]);
+      loadBuckets();
+    } else {
+      setCurrentBucket(normalizedBucket);
+      setCurrentPrefix(normalizedPrefix);
+      loadObjects(normalizedBucket, normalizedPrefix);
+    }
+
+    if (opts?.pushHistory === false) return;
+    const nextLoc: NavLocation = { bucket: normalizedBucket, prefix: normalizedPrefix };
+
+    setNavState((prev) => {
+      const current = prev.stack[prev.index];
+      if (current && current.bucket === nextLoc.bucket && current.prefix === nextLoc.prefix) return prev;
+      const truncated = prev.stack.slice(0, prev.index + 1);
+      truncated.push(nextLoc);
+      return { stack: truncated, index: truncated.length - 1 };
+    });
+  };
+
   const handleBucketClick = (bucketName: string) => {
-    const normalizedBucket = normalizeBucketName(bucketName);
-    setCurrentBucket(normalizedBucket);
-    setCurrentPrefix('');
-    loadObjects(normalizedBucket, '');
+    navigateTo(bucketName, '');
   };
 
   const handleFolderClick = (folderName: string) => {
     const newPrefix = currentPrefix + folderName + '/';
-    setCurrentPrefix(newPrefix);
-    loadObjects(currentBucket, newPrefix);
+    navigateTo(currentBucket, newPrefix);
   };
 
-  const handleBack = () => {
+  const canGoBack = navState.index > 0;
+  const canGoForward = navState.index < navState.stack.length - 1;
+
+  const handleGoBack = () => {
+    if (!canGoBack) return;
+    const nextIndex = navState.index - 1;
+    const target = navState.stack[nextIndex];
+    setNavState((prev) => ({ ...prev, index: nextIndex }));
+    navigateTo(target.bucket, target.prefix, { pushHistory: false });
+  };
+
+  const handleGoForward = () => {
+    if (!canGoForward) return;
+    const nextIndex = navState.index + 1;
+    const target = navState.stack[nextIndex];
+    setNavState((prev) => ({ ...prev, index: nextIndex }));
+    navigateTo(target.bucket, target.prefix, { pushHistory: false });
+  };
+
+  const handleGoUp = () => {
     if (!currentBucket) return;
-    
+
     if (currentPrefix === '') {
-      setCurrentBucket('');
-      setObjects([]);
-      loadBuckets(); 
-    } else {
-      const parts = currentPrefix.split('/').filter(p => p);
-      parts.pop();
-      const newPrefix = parts.length > 0 ? parts.join('/') + '/' : '';
-      setCurrentPrefix(newPrefix);
-      loadObjects(currentBucket, newPrefix);
+      navigateTo('', '');
+      return;
     }
+
+    const parts = currentPrefix.split('/').filter((p) => p);
+    parts.pop();
+    const newPrefix = parts.length > 0 ? parts.join('/') + '/' : '';
+    navigateTo(currentBucket, newPrefix);
   };
 
   const handleRefresh = () => {
@@ -315,23 +364,19 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
 
   const handleBreadcrumbClick = (index: number) => {
       if (index === -1) {
-          setCurrentBucket('');
-          setCurrentPrefix('');
-          loadBuckets();
+          navigateTo('', '');
           return;
       }
       
       if (index === 0) {
-          setCurrentPrefix('');
-          loadObjects(currentBucket, '');
+          navigateTo(currentBucket, '');
           return;
       }
       
       const parts = currentPrefix.split('/').filter(p => p);
       const newParts = parts.slice(0, index);
       const newPrefix = newParts.join('/') + '/';
-      setCurrentPrefix(newPrefix);
-      loadObjects(currentBucket, newPrefix);
+      navigateTo(currentBucket, newPrefix);
   };
 
   // Generate current OSS path
@@ -356,9 +401,7 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
     
     // If empty, go to bucket list
     if (!pathToParse || pathToParse === '/') {
-      setCurrentBucket('');
-      setCurrentPrefix('');
-      loadBuckets();
+      navigateTo('', '');
       return;
     }
     
@@ -369,15 +412,11 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
     const normalizedPrefix = normalizePrefix(prefix);
 
     if (!bucket) {
-      setCurrentBucket('');
-      setCurrentPrefix('');
-      loadBuckets();
+      navigateTo('', '');
       return;
     }
-    
-    setCurrentBucket(bucket);
-    setCurrentPrefix(normalizedPrefix);
-    loadObjects(bucket, normalizedPrefix);
+
+    navigateTo(bucket, normalizedPrefix);
   };
 
   const handleAddressBarClick = () => {
@@ -439,9 +478,7 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
   const handleBookmarkClick = (bookmark: Bookmark) => {
     const bucket = normalizeBucketName(bookmark.bucket);
     const prefix = normalizePrefix(bookmark.prefix);
-    setCurrentBucket(bucket);
-    setCurrentPrefix(prefix);
-    loadObjects(bucket, prefix);
+    navigateTo(bucket, prefix);
   };
 
   const handleRemoveBookmark = (id: string) => {
@@ -656,9 +693,24 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
               disabled={!currentBucket || !profileName}
               title={profileName ? (isCurrentBookmarked ? 'Bookmarked' : 'Add bookmark') : 'Save connection as profile to enable bookmarks'}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-              </svg>
+              {isCurrentBookmarked ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+              ) : (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                >
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+              )}
             </button>
             <button
               className="bookmark-icon-btn"
@@ -708,9 +760,10 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
               </div>
             )}
           </div>
-          <button className="nav-btn" onClick={handleBack} disabled={!currentBucket} title="Go Back">←</button>
+          <button className="nav-btn" onClick={handleGoBack} disabled={!canGoBack} title="Back">←</button>
+          <button className="nav-btn" onClick={handleGoForward} disabled={!canGoForward} title="Forward">→</button>
+          <button className="nav-btn" onClick={handleGoUp} disabled={!currentBucket} title="Up">↑</button>
           <button className="nav-btn" onClick={handleRefresh} disabled={loading} title="Refresh">↻</button>
-          <button className="nav-btn" onClick={handleUpload} disabled={!currentBucket} title="Upload File">↑ Upload</button>
         </div>
         <div className="breadcrumbs" onClick={!addressBarEditing ? handleAddressBarClick : undefined}>
           {addressBarEditing ? (
@@ -728,6 +781,11 @@ function FileBrowser({ config, profileName, initialPath }: FileBrowserProps) {
           ) : (
             renderBreadcrumbs()
           )}
+        </div>
+        <div className="header-actions">
+          <button className="nav-btn" onClick={handleUpload} disabled={!currentBucket} title="Upload File">
+            Upload
+          </button>
         </div>
       </div>
 
