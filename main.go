@@ -45,17 +45,20 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "walioss",
-		Width:  1024,
-		Height: 768,
+		Title:     "walioss",
+		Width:     1024,
+		Height:    768,
 		MinWidth:  900,
 		MinHeight: 760,
-		Menu: appMenu,
+		Menu:      appMenu,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 26, G: 26, B: 46, A: 255},
 		OnStartup:        app.startup,
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop: true,
+		},
 		Bind: []interface{}{
 			app,
 			app.OSSService,

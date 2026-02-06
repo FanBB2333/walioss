@@ -30,8 +30,16 @@ export function EnqueueDownload(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['OSSService']['EnqueueDownload'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function EnqueueDownloadFolder(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['OSSService']['EnqueueDownloadFolder'](arg1, arg2, arg3, arg4);
+}
+
 export function EnqueueUpload(arg1, arg2, arg3, arg4) {
   return window['go']['main']['OSSService']['EnqueueUpload'](arg1, arg2, arg3, arg4);
+}
+
+export function EnqueueUploadPaths(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['OSSService']['EnqueueUploadPaths'](arg1, arg2, arg3, arg4);
 }
 
 export function GetDefaultProfile() {

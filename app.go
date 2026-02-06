@@ -42,6 +42,18 @@ func (a *App) SelectFile() (string, error) {
 	})
 }
 
+// SelectDirectory opens a folder selection dialog
+func (a *App) SelectDirectory(title string) (string, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "Select Folder"
+	}
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:                title,
+		CanCreateDirectories: true,
+	})
+}
+
 // SelectSaveFile opens a save file dialog
 func (a *App) SelectSaveFile(filename string) (string, error) {
 	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{

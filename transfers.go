@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -17,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -37,21 +39,27 @@ const (
 )
 
 type TransferUpdate struct {
-	ID              string         `json:"id"`
-	Type            TransferType   `json:"type"`
-	Status          TransferStatus `json:"status"`
-	Name            string         `json:"name"`
-	Bucket          string         `json:"bucket"`
-	Key             string         `json:"key"`
-	LocalPath       string         `json:"localPath,omitempty"`
-	TotalBytes      int64          `json:"totalBytes,omitempty"`
-	DoneBytes       int64          `json:"doneBytes,omitempty"`
-	SpeedBytesPerSec float64       `json:"speedBytesPerSec,omitempty"`
-	EtaSeconds      int64          `json:"etaSeconds,omitempty"`
-	Message         string         `json:"message,omitempty"`
-	StartedAtMs     int64          `json:"startedAtMs,omitempty"`
-	UpdatedAtMs     int64          `json:"updatedAtMs,omitempty"`
-	FinishedAtMs    int64          `json:"finishedAtMs,omitempty"`
+	ID               string         `json:"id"`
+	Type             TransferType   `json:"type"`
+	Status           TransferStatus `json:"status"`
+	Name             string         `json:"name"`
+	Bucket           string         `json:"bucket"`
+	Key              string         `json:"key"`
+	LocalPath        string         `json:"localPath,omitempty"`
+	ParentID         string         `json:"parentId,omitempty"`
+	IsGroup          bool           `json:"isGroup,omitempty"`
+	FileCount        int            `json:"fileCount,omitempty"`
+	DoneCount        int            `json:"doneCount,omitempty"`
+	SuccessCount     int            `json:"successCount,omitempty"`
+	ErrorCount       int            `json:"errorCount,omitempty"`
+	TotalBytes       int64          `json:"totalBytes,omitempty"`
+	DoneBytes        int64          `json:"doneBytes,omitempty"`
+	SpeedBytesPerSec float64        `json:"speedBytesPerSec,omitempty"`
+	EtaSeconds       int64          `json:"etaSeconds,omitempty"`
+	Message          string         `json:"message,omitempty"`
+	StartedAtMs      int64          `json:"startedAtMs,omitempty"`
+	UpdatedAtMs      int64          `json:"updatedAtMs,omitempty"`
+	FinishedAtMs     int64          `json:"finishedAtMs,omitempty"`
 }
 
 type transferLimiter struct {
@@ -114,6 +122,13 @@ func (s *OSSService) emitTransferUpdate(update TransferUpdate) {
 	runtime.EventsEmit(ctx, "transfer:update", update)
 }
 
+func (s *OSSService) emitTransfer(update TransferUpdate, onUpdate func(TransferUpdate)) {
+	s.emitTransferUpdate(update)
+	if onUpdate != nil {
+		onUpdate(update)
+	}
+}
+
 func (s *OSSService) getMaxTransferThreads() int {
 	s.transferLimiterMu.RLock()
 	defer s.transferLimiterMu.RUnlock()
@@ -133,59 +148,460 @@ func (s *OSSService) setMaxTransferThreads(max int) {
 	s.transferLimiter.SetMax(max)
 }
 
-func (s *OSSService) EnqueueUpload(config OSSConfig, bucket string, prefix string, localPath string) (string, error) {
-	localPath = strings.TrimSpace(localPath)
-	if localPath == "" {
-		return "", errors.New("local path is empty")
-	}
-	if strings.TrimSpace(bucket) == "" {
-		return "", errors.New("bucket is empty")
-	}
+type uploadFilePlan struct {
+	LocalPath   string
+	RelativeKey string
+	DisplayName string
+	Size        int64
+}
 
-	stat, err := os.Stat(localPath)
-	if err != nil {
-		return "", fmt.Errorf("stat local file failed: %w", err)
-	}
-	if stat.IsDir() {
-		return "", errors.New("upload currently supports files only")
-	}
+type uploadPlan struct {
+	LocalPath string
+	IsDir     bool
+	RootName  string
+	Files     []uploadFilePlan
+	TotalSize int64
+}
 
-	fileName := filepath.Base(localPath)
-	key := strings.TrimPrefix(prefix, "/")
+type transferGroupChildState struct {
+	TotalBytes       int64
+	DoneBytes        int64
+	SpeedBytesPerSec float64
+	Status           TransferStatus
+	StartedAtMs      int64
+	FinishedAtMs     int64
+}
+
+func normalizeTransferBucket(bucket string) string {
+	return strings.Trim(strings.TrimSpace(bucket), "/")
+}
+
+func normalizeTransferPrefix(prefix string) string {
+	prefix = strings.TrimSpace(prefix)
+	prefix = strings.TrimLeft(prefix, "/")
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	return prefix
+}
+
+func normalizeTransferObjectKey(key string) string {
+	return strings.TrimLeft(strings.TrimSpace(key), "/")
+}
+
+func normalizeTransferFolderKey(key string) string {
+	key = normalizeTransferObjectKey(key)
 	if key != "" && !strings.HasSuffix(key, "/") {
 		key += "/"
 	}
-	key += fileName
+	return key
+}
 
-	id := fmt.Sprintf("tr-%d-%d", time.Now().UnixMilli(), atomic.AddUint64(&s.transferSeq, 1))
-	update := TransferUpdate{
-		ID:         id,
-		Type:       TransferTypeUpload,
-		Status:     TransferStatusQueued,
-		Name:       fileName,
-		Bucket:     bucket,
-		Key:        key,
-		LocalPath:  localPath,
-		TotalBytes: stat.Size(),
-		UpdatedAtMs: time.Now().UnixMilli(),
+func safeRelativeDownloadPath(relative string) (string, error) {
+	relative = strings.TrimSpace(relative)
+	relative = strings.TrimLeft(relative, "/")
+	if relative == "" {
+		return "", errors.New("empty relative path")
 	}
-	s.emitTransferUpdate(update)
+	clean := filepath.Clean(filepath.FromSlash(relative))
+	if filepath.IsAbs(clean) || filepath.VolumeName(clean) != "" {
+		return "", fmt.Errorf("unsafe relative path: %s", relative)
+	}
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("unsafe relative path: %s", relative)
+	}
+	return clean, nil
+}
 
-	go s.runTransfer(config, update)
-	return id, nil
+func (s *OSSService) newTransferID() string {
+	return fmt.Sprintf("tr-%d-%d", time.Now().UnixMilli(), atomic.AddUint64(&s.transferSeq, 1))
+}
+
+func buildUploadPlan(localPath string) (uploadPlan, error) {
+	localPath = strings.TrimSpace(localPath)
+	if localPath == "" {
+		return uploadPlan{}, errors.New("local path is empty")
+	}
+	localPath = filepath.Clean(localPath)
+
+	stat, err := os.Stat(localPath)
+	if err != nil {
+		return uploadPlan{}, fmt.Errorf("stat local path failed: %w", err)
+	}
+
+	if !stat.IsDir() {
+		name := filepath.Base(localPath)
+		return uploadPlan{
+			LocalPath: localPath,
+			IsDir:     false,
+			RootName:  name,
+			Files: []uploadFilePlan{
+				{
+					LocalPath:   localPath,
+					RelativeKey: filepath.ToSlash(name),
+					DisplayName: name,
+					Size:        stat.Size(),
+				},
+			},
+			TotalSize: stat.Size(),
+		}, nil
+	}
+
+	rootName := filepath.Base(localPath)
+	if rootName == "." || rootName == string(filepath.Separator) || strings.TrimSpace(rootName) == "" {
+		rootName = "folder"
+	}
+
+	plan := uploadPlan{
+		LocalPath: localPath,
+		IsDir:     true,
+		RootName:  rootName,
+		Files:     make([]uploadFilePlan, 0, 16),
+	}
+
+	err = filepath.WalkDir(localPath, func(current string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+
+		rel, relErr := filepath.Rel(localPath, current)
+		if relErr != nil {
+			return relErr
+		}
+		rel = filepath.ToSlash(rel)
+		rel = strings.TrimLeft(rel, "/")
+		if rel == "" || rel == "." {
+			return nil
+		}
+
+		relativeKey := path.Join(rootName, rel)
+		plan.Files = append(plan.Files, uploadFilePlan{
+			LocalPath:   current,
+			RelativeKey: relativeKey,
+			DisplayName: relativeKey,
+			Size:        info.Size(),
+		})
+		if info.Size() > 0 {
+			plan.TotalSize += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return uploadPlan{}, fmt.Errorf("walk folder failed: %w", err)
+	}
+
+	if len(plan.Files) == 0 {
+		return uploadPlan{}, errors.New("folder has no files to upload")
+	}
+
+	return plan, nil
+}
+
+func (s *OSSService) enqueueTransfer(config OSSConfig, update TransferUpdate, onUpdate func(TransferUpdate)) {
+	s.emitTransfer(update, onUpdate)
+	go s.runTransfer(config, update, onUpdate)
+}
+
+func (s *OSSService) enqueueTransferGroup(config OSSConfig, group TransferUpdate, children []TransferUpdate) error {
+	if len(children) == 0 {
+		return errors.New("group has no child transfers")
+	}
+
+	if group.ID == "" {
+		group.ID = s.newTransferID()
+	}
+	group.IsGroup = true
+	group.Status = TransferStatusQueued
+	group.FileCount = len(children)
+	group.DoneCount = 0
+	group.SuccessCount = 0
+	group.ErrorCount = 0
+	group.UpdatedAtMs = time.Now().UnixMilli()
+	group.ParentID = ""
+	group.SpeedBytesPerSec = 0
+	group.EtaSeconds = 0
+	group.StartedAtMs = 0
+	group.FinishedAtMs = 0
+	s.emitTransfer(group, nil)
+
+	childStates := make(map[string]transferGroupChildState, len(children))
+	for i := range children {
+		child := children[i]
+		if child.ID == "" {
+			child.ID = s.newTransferID()
+		}
+		child.ParentID = group.ID
+		child.Status = TransferStatusQueued
+		child.UpdatedAtMs = time.Now().UnixMilli()
+		children[i] = child
+		childStates[child.ID] = transferGroupChildState{
+			TotalBytes: child.TotalBytes,
+			DoneBytes:  child.DoneBytes,
+			Status:     TransferStatusQueued,
+		}
+		s.emitTransfer(child, nil)
+	}
+
+	var mu sync.Mutex
+	emitInterval := 250 * time.Millisecond
+	var lastEmit time.Time
+	currentGroup := group
+
+	emitGroupLocked := func(force bool) {
+		now := time.Now()
+		if !force && !lastEmit.IsZero() && now.Sub(lastEmit) < emitInterval {
+			return
+		}
+		lastEmit = now
+
+		totalBytes := int64(0)
+		doneBytes := int64(0)
+		speed := 0.0
+		doneCount := 0
+		successCount := 0
+		errorCount := 0
+		hasInProgress := false
+		startedAt := int64(0)
+		finishedAt := int64(0)
+
+		for _, child := range childStates {
+			if child.TotalBytes > 0 {
+				totalBytes += child.TotalBytes
+			}
+			if child.DoneBytes > 0 {
+				doneBytes += child.DoneBytes
+			}
+			if child.Status == TransferStatusInProgress && child.SpeedBytesPerSec > 0 {
+				speed += child.SpeedBytesPerSec
+			}
+
+			switch child.Status {
+			case TransferStatusSuccess:
+				doneCount++
+				successCount++
+			case TransferStatusError:
+				doneCount++
+				errorCount++
+			case TransferStatusInProgress:
+				hasInProgress = true
+			}
+
+			if child.StartedAtMs > 0 && (startedAt == 0 || child.StartedAtMs < startedAt) {
+				startedAt = child.StartedAtMs
+			}
+			if child.FinishedAtMs > finishedAt {
+				finishedAt = child.FinishedAtMs
+			}
+		}
+
+		next := currentGroup
+		next.TotalBytes = totalBytes
+		next.DoneBytes = doneBytes
+		next.SpeedBytesPerSec = speed
+		next.FileCount = len(childStates)
+		next.DoneCount = doneCount
+		next.SuccessCount = successCount
+		next.ErrorCount = errorCount
+		if totalBytes > 0 && speed > 0 && doneBytes >= 0 && doneBytes <= totalBytes {
+			next.EtaSeconds = int64(float64(totalBytes-doneBytes) / speed)
+		} else {
+			next.EtaSeconds = 0
+		}
+		if startedAt > 0 {
+			next.StartedAtMs = startedAt
+		}
+		next.UpdatedAtMs = now.UnixMilli()
+
+		if doneCount >= len(childStates) {
+			if errorCount > 0 {
+				next.Status = TransferStatusError
+				next.Message = fmt.Sprintf("%d succeeded, %d failed", successCount, errorCount)
+			} else {
+				next.Status = TransferStatusSuccess
+				next.Message = ""
+				if next.TotalBytes > 0 {
+					next.DoneBytes = next.TotalBytes
+				}
+			}
+			if finishedAt == 0 {
+				finishedAt = now.UnixMilli()
+			}
+			next.FinishedAtMs = finishedAt
+			next.SpeedBytesPerSec = 0
+			next.EtaSeconds = 0
+		} else if hasInProgress || doneCount > 0 || startedAt > 0 {
+			next.Status = TransferStatusInProgress
+			if errorCount > 0 {
+				next.Message = fmt.Sprintf("%d failed", errorCount)
+			} else {
+				next.Message = ""
+			}
+		}
+
+		currentGroup = next
+		s.emitTransfer(next, nil)
+	}
+
+	onChildUpdate := func(child TransferUpdate) {
+		mu.Lock()
+		state := childStates[child.ID]
+		if child.TotalBytes > 0 {
+			state.TotalBytes = child.TotalBytes
+		}
+		if child.DoneBytes > 0 {
+			state.DoneBytes = child.DoneBytes
+		} else if child.Status == TransferStatusSuccess && state.TotalBytes > 0 {
+			state.DoneBytes = state.TotalBytes
+		}
+		state.SpeedBytesPerSec = child.SpeedBytesPerSec
+		state.Status = child.Status
+		if child.StartedAtMs > 0 && (state.StartedAtMs == 0 || child.StartedAtMs < state.StartedAtMs) {
+			state.StartedAtMs = child.StartedAtMs
+		}
+		if child.FinishedAtMs > 0 {
+			state.FinishedAtMs = child.FinishedAtMs
+		}
+		childStates[child.ID] = state
+		force := child.Status == TransferStatusSuccess || child.Status == TransferStatusError
+		emitGroupLocked(force)
+		mu.Unlock()
+	}
+
+	for _, child := range children {
+		child := child
+		go s.runTransfer(config, child, onChildUpdate)
+	}
+
+	return nil
+}
+
+func (s *OSSService) enqueueUploadPlan(config OSSConfig, bucket string, prefix string, plan uploadPlan) (string, error) {
+	if len(plan.Files) == 0 {
+		return "", errors.New("upload plan has no files")
+	}
+
+	if !plan.IsDir {
+		file := plan.Files[0]
+		key := prefix + file.RelativeKey
+		update := TransferUpdate{
+			ID:          s.newTransferID(),
+			Type:        TransferTypeUpload,
+			Status:      TransferStatusQueued,
+			Name:        file.DisplayName,
+			Bucket:      bucket,
+			Key:         key,
+			LocalPath:   file.LocalPath,
+			TotalBytes:  file.Size,
+			UpdatedAtMs: time.Now().UnixMilli(),
+		}
+		s.enqueueTransfer(config, update, nil)
+		return update.ID, nil
+	}
+
+	group := TransferUpdate{
+		ID:          s.newTransferID(),
+		Type:        TransferTypeUpload,
+		Status:      TransferStatusQueued,
+		Name:        plan.RootName,
+		Bucket:      bucket,
+		Key:         prefix + path.Join(plan.RootName) + "/",
+		LocalPath:   plan.LocalPath,
+		TotalBytes:  plan.TotalSize,
+		FileCount:   len(plan.Files),
+		UpdatedAtMs: time.Now().UnixMilli(),
+		IsGroup:     true,
+	}
+
+	children := make([]TransferUpdate, 0, len(plan.Files))
+	for _, file := range plan.Files {
+		children = append(children, TransferUpdate{
+			ID:          s.newTransferID(),
+			Type:        TransferTypeUpload,
+			Status:      TransferStatusQueued,
+			Name:        file.DisplayName,
+			Bucket:      bucket,
+			Key:         prefix + file.RelativeKey,
+			LocalPath:   file.LocalPath,
+			TotalBytes:  file.Size,
+			UpdatedAtMs: time.Now().UnixMilli(),
+		})
+	}
+
+	if err := s.enqueueTransferGroup(config, group, children); err != nil {
+		return "", err
+	}
+	return group.ID, nil
+}
+
+func (s *OSSService) EnqueueUploadPaths(config OSSConfig, bucket string, prefix string, localPaths []string) ([]string, error) {
+	bucket = normalizeTransferBucket(bucket)
+	if bucket == "" {
+		return nil, errors.New("bucket is empty")
+	}
+
+	prefix = normalizeTransferPrefix(prefix)
+
+	plans := make([]uploadPlan, 0, len(localPaths))
+	for _, localPath := range localPaths {
+		localPath = strings.TrimSpace(localPath)
+		if localPath == "" {
+			continue
+		}
+		plan, err := buildUploadPlan(localPath)
+		if err != nil {
+			return nil, err
+		}
+		plans = append(plans, plan)
+	}
+	if len(plans) == 0 {
+		return nil, errors.New("no local paths to upload")
+	}
+
+	ids := make([]string, 0, len(plans))
+	for _, plan := range plans {
+		id, err := s.enqueueUploadPlan(config, bucket, prefix, plan)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (s *OSSService) EnqueueUpload(config OSSConfig, bucket string, prefix string, localPath string) (string, error) {
+	ids, err := s.EnqueueUploadPaths(config, bucket, prefix, []string{localPath})
+	if err != nil {
+		return "", err
+	}
+	if len(ids) == 0 {
+		return "", errors.New("no transfer enqueued")
+	}
+	return ids[0], nil
 }
 
 func (s *OSSService) EnqueueDownload(config OSSConfig, bucket string, object string, localPath string, totalBytes int64) (string, error) {
 	localPath = strings.TrimSpace(localPath)
-	object = strings.TrimPrefix(strings.TrimSpace(object), "/")
+	object = normalizeTransferObjectKey(object)
+	bucket = normalizeTransferBucket(bucket)
 	if localPath == "" {
 		return "", errors.New("local path is empty")
 	}
-	if strings.TrimSpace(bucket) == "" {
+	if bucket == "" {
 		return "", errors.New("bucket is empty")
 	}
 	if object == "" {
 		return "", errors.New("object key is empty")
+	}
+	if strings.HasSuffix(object, "/") {
+		return "", errors.New("object key points to a folder, use EnqueueDownloadFolder")
 	}
 
 	name := path.Base(object)
@@ -193,22 +609,135 @@ func (s *OSSService) EnqueueDownload(config OSSConfig, bucket string, object str
 		name = object
 	}
 
-	id := fmt.Sprintf("tr-%d-%d", time.Now().UnixMilli(), atomic.AddUint64(&s.transferSeq, 1))
 	update := TransferUpdate{
-		ID:         id,
-		Type:       TransferTypeDownload,
-		Status:     TransferStatusQueued,
-		Name:       name,
-		Bucket:     bucket,
-		Key:        object,
-		LocalPath:  localPath,
-		TotalBytes: totalBytes,
+		ID:          s.newTransferID(),
+		Type:        TransferTypeDownload,
+		Status:      TransferStatusQueued,
+		Name:        name,
+		Bucket:      bucket,
+		Key:         object,
+		LocalPath:   localPath,
+		TotalBytes:  totalBytes,
 		UpdatedAtMs: time.Now().UnixMilli(),
 	}
-	s.emitTransferUpdate(update)
+	s.enqueueTransfer(config, update, nil)
+	return update.ID, nil
+}
 
-	go s.runTransfer(config, update)
-	return id, nil
+func (s *OSSService) EnqueueDownloadFolder(config OSSConfig, bucket string, folderKey string, localDir string) (string, error) {
+	bucket = normalizeTransferBucket(bucket)
+	folderKey = normalizeTransferFolderKey(folderKey)
+	localDir = strings.TrimSpace(localDir)
+
+	if bucket == "" {
+		return "", errors.New("bucket is empty")
+	}
+	if folderKey == "" {
+		return "", errors.New("folder key is empty")
+	}
+	if localDir == "" {
+		return "", errors.New("local directory is empty")
+	}
+
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		return "", fmt.Errorf("create local directory failed: %w", err)
+	}
+
+	folderName := path.Base(strings.TrimSuffix(folderKey, "/"))
+	if folderName == "" || folderName == "." || folderName == "/" {
+		return "", errors.New("invalid folder key")
+	}
+	localRoot := filepath.Join(localDir, folderName)
+
+	client, err := sdkClientFromConfig(config)
+	if err != nil {
+		return "", err
+	}
+	bkt, err := client.Bucket(bucket)
+	if err != nil {
+		return "", fmt.Errorf("failed to open bucket: %w", err)
+	}
+
+	children := make([]TransferUpdate, 0, 32)
+	totalBytes := int64(0)
+	marker := ""
+	for {
+		lor, listErr := bkt.ListObjects(
+			oss.Prefix(folderKey),
+			oss.Marker(marker),
+			oss.MaxKeys(1000),
+		)
+		if listErr != nil {
+			return "", fmt.Errorf("failed to list folder objects: %w", listErr)
+		}
+
+		for _, object := range lor.Objects {
+			key := normalizeTransferObjectKey(object.Key)
+			if key == "" || !strings.HasPrefix(key, folderKey) || strings.HasSuffix(key, "/") {
+				continue
+			}
+
+			relative := strings.TrimPrefix(key, folderKey)
+			relative = strings.TrimLeft(relative, "/")
+			if relative == "" {
+				continue
+			}
+
+			relativeLocal, relErr := safeRelativeDownloadPath(relative)
+			if relErr != nil {
+				return "", relErr
+			}
+
+			localPath := filepath.Join(localRoot, relativeLocal)
+			if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o755); mkdirErr != nil {
+				return "", fmt.Errorf("prepare local folder failed: %w", mkdirErr)
+			}
+
+			displayName := path.Join(folderName, strings.ReplaceAll(relativeLocal, string(filepath.Separator), "/"))
+			children = append(children, TransferUpdate{
+				ID:          s.newTransferID(),
+				Type:        TransferTypeDownload,
+				Status:      TransferStatusQueued,
+				Name:        displayName,
+				Bucket:      bucket,
+				Key:         key,
+				LocalPath:   localPath,
+				TotalBytes:  object.Size,
+				UpdatedAtMs: time.Now().UnixMilli(),
+			})
+			if object.Size > 0 {
+				totalBytes += object.Size
+			}
+		}
+
+		if !lor.IsTruncated || lor.NextMarker == "" {
+			break
+		}
+		marker = lor.NextMarker
+	}
+
+	if len(children) == 0 {
+		return "", errors.New("folder has no files to download")
+	}
+
+	group := TransferUpdate{
+		ID:          s.newTransferID(),
+		Type:        TransferTypeDownload,
+		Status:      TransferStatusQueued,
+		Name:        folderName,
+		Bucket:      bucket,
+		Key:         folderKey,
+		LocalPath:   localRoot,
+		TotalBytes:  totalBytes,
+		FileCount:   len(children),
+		UpdatedAtMs: time.Now().UnixMilli(),
+		IsGroup:     true,
+	}
+
+	if err := s.enqueueTransferGroup(config, group, children); err != nil {
+		return "", err
+	}
+	return group.ID, nil
 }
 
 var (
@@ -358,7 +887,7 @@ func (b *ringBuffer) String() string {
 	return strings.TrimSpace(string(b.data))
 }
 
-func (s *OSSService) runTransfer(config OSSConfig, update TransferUpdate) {
+func (s *OSSService) runTransfer(config OSSConfig, update TransferUpdate, onUpdate func(TransferUpdate)) {
 	s.transferLimiterMu.RLock()
 	limiter := s.transferLimiter
 	s.transferLimiterMu.RUnlock()
@@ -379,7 +908,7 @@ func (s *OSSService) runTransfer(config OSSConfig, update TransferUpdate) {
 	update.Status = TransferStatusInProgress
 	update.StartedAtMs = time.Now().UnixMilli()
 	update.UpdatedAtMs = update.StartedAtMs
-	s.emitTransferUpdate(update)
+	s.emitTransfer(update, onUpdate)
 
 	var args []string
 	region := normalizeRegion(config.Region)
@@ -387,6 +916,16 @@ func (s *OSSService) runTransfer(config OSSConfig, update TransferUpdate) {
 
 	switch update.Type {
 	case TransferTypeDownload:
+		if dir := filepath.Dir(update.LocalPath); dir != "" && dir != "." {
+			if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+				update.Status = TransferStatusError
+				update.Message = fmt.Sprintf("create local directory failed: %v", mkErr)
+				update.FinishedAtMs = time.Now().UnixMilli()
+				update.UpdatedAtMs = update.FinishedAtMs
+				s.emitTransfer(update, onUpdate)
+				return
+			}
+		}
 		cloudURL := fmt.Sprintf("oss://%s/%s", update.Bucket, update.Key)
 		args = []string{
 			"cp",
@@ -413,7 +952,7 @@ func (s *OSSService) runTransfer(config OSSConfig, update TransferUpdate) {
 		update.Message = "unknown transfer type"
 		update.FinishedAtMs = time.Now().UnixMilli()
 		update.UpdatedAtMs = update.FinishedAtMs
-		s.emitTransferUpdate(update)
+		s.emitTransfer(update, onUpdate)
 		return
 	}
 
@@ -421,14 +960,14 @@ func (s *OSSService) runTransfer(config OSSConfig, update TransferUpdate) {
 		args = append(args, "--endpoint", endpoint)
 	}
 
-	err := s.runOssutilWithProgress(args, &update)
+	err := s.runOssutilWithProgress(args, &update, onUpdate)
 	update.FinishedAtMs = time.Now().UnixMilli()
 	update.UpdatedAtMs = update.FinishedAtMs
 
 	if err != nil {
 		update.Status = TransferStatusError
 		update.Message = err.Error()
-		s.emitTransferUpdate(update)
+		s.emitTransfer(update, onUpdate)
 		return
 	}
 
@@ -436,10 +975,10 @@ func (s *OSSService) runTransfer(config OSSConfig, update TransferUpdate) {
 	if update.TotalBytes > 0 {
 		update.DoneBytes = update.TotalBytes
 	}
-	s.emitTransferUpdate(update)
+	s.emitTransfer(update, onUpdate)
 }
 
-func (s *OSSService) runOssutilWithProgress(args []string, update *TransferUpdate) error {
+func (s *OSSService) runOssutilWithProgress(args []string, update *TransferUpdate, onUpdate func(TransferUpdate)) error {
 	if update == nil {
 		return errors.New("internal error: missing transfer update")
 	}
@@ -504,7 +1043,7 @@ func (s *OSSService) runOssutilWithProgress(args []string, update *TransferUpdat
 		copied := *update
 		mu.Unlock()
 
-		s.emitTransferUpdate(copied)
+		s.emitTransfer(copied, onUpdate)
 	}
 
 	segments := make(chan string, 128)
@@ -562,4 +1101,3 @@ func (s *OSSService) runOssutilWithProgress(args []string, update *TransferUpdat
 	emit(true)
 	return nil
 }
-

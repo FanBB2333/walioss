@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { main } from '../../wailsjs/go/models';
-import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueUpload, ListBuckets, ListObjectsPage, MoveObject } from '../../wailsjs/go/main/OSSService';
-import { SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
+import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueDownloadFolder, EnqueueUploadPaths, ListBuckets, ListObjectsPage, MoveObject } from '../../wailsjs/go/main/OSSService';
+import { SelectDirectory, SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
 import ConfirmationModal from './ConfirmationModal';
 import FilePreviewModal from './FilePreviewModal';
 import { EventsEmit, EventsOn } from '../../wailsjs/runtime/runtime';
@@ -137,6 +137,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewObject, setPreviewObject] = useState<main.ObjectInfo | null>(null);
   const [bookmarkMenuOpen, setBookmarkMenuOpen] = useState(false);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
   const [crumbPopover, setCrumbPopover] = useState<CrumbPopoverState | null>(null);
   const crumbPopoverRequestIdRef = useRef(0);
   const crumbPopoverCloseTimerRef = useRef<number | null>(null);
@@ -281,6 +282,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
     const off = EventsOn('transfer:update', (payload: any) => {
       const update = payload as any;
       if (update?.type !== 'upload' || update?.status !== 'success') return;
+      if (update?.parentId && !update?.isGroup) return;
       if (update?.bucket !== currentBucket) return;
       if (typeof update?.key === 'string' && !update.key.startsWith(currentPrefix)) return;
       const marker = markerForPage(pageIndex);
@@ -312,6 +314,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
     const handleClick = () => {
       setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
       setBookmarkMenuOpen(false);
+      setUploadMenuOpen(false);
       setCrumbPopover(null);
     };
     document.addEventListener('click', handleClick);
@@ -894,13 +897,32 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
     setContextMenu((prev) => ({ ...prev, visible: false }));
   };
 
-  const handleUpload = async () => {
+  const enqueueLocalUploadPaths = async (paths: string[]) => {
+    if (!currentBucket) return;
+    const cleaned = paths.map((p) => (p || '').trim()).filter((p) => !!p);
+    if (cleaned.length === 0) return;
+    await EnqueueUploadPaths(config, currentBucket, currentPrefix, cleaned);
+  };
+
+  const handleUploadFile = async () => {
     try {
       const filePath = await SelectFile();
+      setUploadMenuOpen(false);
       if (!filePath) return;
-      await EnqueueUpload(config, currentBucket, currentPrefix, filePath);
+      await enqueueLocalUploadPaths([filePath]);
     } catch (err: any) {
       setError(err?.message || "Upload failed");
+    }
+  };
+
+  const handleUploadFolder = async () => {
+    try {
+      const dirPath = await SelectDirectory('Select Folder to Upload');
+      setUploadMenuOpen(false);
+      if (!dirPath) return;
+      await enqueueLocalUploadPaths([dirPath]);
+    } catch (err: any) {
+      setError(err?.message || "Upload folder failed");
     }
   };
 
@@ -1035,13 +1057,20 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
 
   const handleDownload = async (target?: main.ObjectInfo) => {
     const obj = target || contextMenu.object;
-    if (!obj || isFolder(obj) || !currentBucket) return;
+    if (!obj || !currentBucket) return;
+    const parsed = parseObjectPath(obj.path);
+    if (!parsed?.key) return;
 
     try {
-      const savePath = await SelectSaveFile(obj.name);
-      if (!savePath) return;
-      const fullKey = obj.path.substring(`oss://${currentBucket}/`.length);
-      await EnqueueDownload(config, currentBucket, fullKey, savePath, obj.size);
+      if (isFolder(obj)) {
+        const dirPath = await SelectDirectory(`Download "${obj.name}" To`);
+        if (!dirPath) return;
+        await EnqueueDownloadFolder(config, currentBucket, parsed.key, dirPath);
+      } else {
+        const savePath = await SelectSaveFile(obj.name);
+        if (!savePath) return;
+        await EnqueueDownload(config, currentBucket, parsed.key, savePath, obj.size);
+      }
     } catch (err: any) {
       alert("Download failed: " + err.message);
     }
@@ -1520,9 +1549,29 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
 	            </div>
 	          </div>
 	          <div className="browser-actions-right">
-	            <button className="action-btn" type="button" onClick={handleUpload} title="Upload File">
-	              Upload
-	            </button>
+              <div className="upload-menu-wrap">
+                <button
+                  className={`action-btn ${uploadMenuOpen ? 'active' : ''}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setUploadMenuOpen((v) => !v);
+                  }}
+                  title="Upload"
+                >
+                  Upload
+                </button>
+                {uploadMenuOpen && (
+                  <div className="upload-menu" onClick={(e) => e.stopPropagation()}>
+                    <button className="upload-menu-item" type="button" onClick={() => void handleUploadFile()}>
+                      Upload File
+                    </button>
+                    <button className="upload-menu-item" type="button" onClick={() => void handleUploadFolder()}>
+                      Upload Folder
+                    </button>
+                  </div>
+                )}
+              </div>
 	            <button className="action-btn" type="button" onClick={requestCreateFolder} title="New Folder">
 	              New Folder
 	            </button>
@@ -1545,7 +1594,10 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
 	        </div>
 	      )}
 
-	      <div className="browser-content">
+	      <div
+          className={`browser-content ${currentBucket ? 'browser-upload-dropzone' : ''}`.trim()}
+          style={currentBucket ? ({ ['--wails-drop-target' as any]: 'drop' }) : undefined}
+        >
 	        {loading ? (
           <div className="loading-container">
             <div className="loading-spinner"></div>
@@ -1724,15 +1776,26 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
 	                        <td className="file-actions-td">
 	                          <div className="file-actions">
 	                            {isFolder(obj) ? (
-	                              <button
-	                                className="link-btn"
-	                                onClick={(e) => {
-	                                  e.stopPropagation();
-	                                  handleFolderClick(obj.name);
-	                                }}
-	                              >
-	                                Open
-	                              </button>
+                                <>
+                                  <button
+                                    className="link-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleFolderClick(obj.name);
+                                    }}
+                                  >
+                                    Open
+                                  </button>
+                                  <button
+                                    className="link-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownload(obj);
+                                    }}
+                                  >
+                                    Download
+                                  </button>
+                                </>
 	                            ) : (
 	                              <>
 	                                <button
@@ -1828,6 +1891,16 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
                 </svg>
               </span>
               Open
+            </div>
+          )}
+          {contextMenu.object && isFolder(contextMenu.object) && (
+            <div className="context-menu-item" onClick={() => handleDownload()}>
+              <span className="context-menu-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                </svg>
+              </span>
+              Download
             </div>
           )}
           {contextMenu.object && !isFolder(contextMenu.object) && (

@@ -10,6 +10,8 @@ export function OpenFile(arg1:string):Promise<void>;
 
 export function OpenInFinder(arg1:string):Promise<void>;
 
+export function SelectDirectory(arg1:string):Promise<string>;
+
 export function SelectFile():Promise<string>;
 
 export function SelectSaveFile(arg1:string):Promise<string>;

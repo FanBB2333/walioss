@@ -17,7 +17,11 @@ export function DownloadFile(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:st
 
 export function EnqueueDownload(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string,arg5:number):Promise<string>;
 
+export function EnqueueDownloadFolder(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<string>;
+
 export function EnqueueUpload(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function EnqueueUploadPaths(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:Array<string>):Promise<Array<string>>;
 
 export function GetDefaultProfile():Promise<main.OSSProfile>;
 

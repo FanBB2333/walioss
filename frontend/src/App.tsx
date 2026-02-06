@@ -6,9 +6,9 @@ import AboutModal from './components/AboutModal';
 import FileBrowser from './components/FileBrowser';
 import TransferModal from './components/TransferModal';
 import { main } from '../wailsjs/go/models';
-import { GetSettings, MoveObject } from '../wailsjs/go/main/OSSService';
+import { EnqueueUploadPaths, GetSettings, MoveObject } from '../wailsjs/go/main/OSSService';
 import { GetAppInfo, OpenFile, OpenInFinder } from '../wailsjs/go/main/App';
-import { EventsEmit, EventsOn } from '../wailsjs/runtime/runtime';
+import { EventsEmit, EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { canReadOssDragPayload, readOssDragPayload } from './ossDrag';
 
 type GlobalView = 'session' | 'settings';
@@ -30,6 +30,12 @@ type TransferItem = {
   type: TransferType;
   bucket: string;
   key: string;
+  parentId?: string;
+  isGroup?: boolean;
+  fileCount?: number;
+  doneCount?: number;
+  successCount?: number;
+  errorCount?: number;
   status: TransferStatus;
   message?: string;
   localPath?: string;
@@ -240,6 +246,11 @@ function App() {
       const update = payload as any;
       if (!update?.id) return;
 
+      if (update?.isGroup && update?.status === 'queued' && (update?.type === 'upload' || update?.type === 'download')) {
+        setTransferView(update.type as TransferType);
+        setShowTransfers(true);
+      }
+
       setTransfers((prev) => {
         const index = prev.findIndex((t) => t.id === update.id);
         const next: TransferItem = {
@@ -248,6 +259,12 @@ function App() {
           type: update.type,
           bucket: update.bucket,
           key: update.key,
+          parentId: update.parentId,
+          isGroup: !!update.isGroup,
+          fileCount: update.fileCount,
+          doneCount: update.doneCount,
+          successCount: update.successCount,
+          errorCount: update.errorCount,
           status: update.status,
           message: update.message,
           localPath: update.localPath,
@@ -278,6 +295,37 @@ function App() {
     });
     return () => off();
   }, [openAbout]);
+
+  useEffect(() => {
+    if (!sessionConfig) {
+      OnFileDropOff();
+      return;
+    }
+
+    OnFileDrop((_x: number, _y: number, paths: string[]) => {
+      if (!sessionConfig) return;
+      if (!Array.isArray(paths) || paths.length === 0) return;
+      const bucket = normalizeBucketName(activeTab?.bucket || '');
+      if (!bucket) {
+        showToast('error', 'Open a bucket before uploading files');
+        return;
+      }
+
+      const prefix = normalizePrefix(activeTab?.prefix || '');
+      void EnqueueUploadPaths(sessionConfig, bucket, prefix, paths)
+        .then((ids) => {
+          if (!Array.isArray(ids) || ids.length === 0) return;
+          setTransferView('upload');
+          setShowTransfers(true);
+          showToast('info', ids.length > 1 ? `Queued ${ids.length} upload tasks` : 'Queued upload task');
+        })
+        .catch((err: any) => {
+          showToast('error', err?.message || 'Upload failed');
+        });
+    }, true);
+
+    return () => OnFileDropOff();
+  }, [activeTab?.bucket, activeTab?.prefix, sessionConfig, showToast]);
 
   const handleLoginSuccess = (config: main.OSSConfig, profileName?: string | null) => {
     const initialLoc = parseOssPathLocation(config?.defaultPath);
@@ -602,7 +650,7 @@ function App() {
     };
   }, [activeTabId, tabs]);
 
-  const inProgressCount = transfers.filter((t) => t.status === 'in-progress' || t.status === 'queued').length;
+  const inProgressCount = transfers.filter((t) => !t.parentId && (t.status === 'in-progress' || t.status === 'queued')).length;
 
   return (
     <>

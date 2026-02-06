@@ -496,6 +496,44 @@
     color: #ffffff;
 }
 
+.upload-menu-wrap {
+    position: relative;
+}
+
+.upload-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 158px;
+    padding: 6px;
+    border-radius: 10px;
+    background: #1e1e36;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.7);
+    z-index: 960;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.upload-menu-item {
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: left;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.upload-menu-item:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: #ffffff;
+}
+
 .crumb {
     color: rgba(255, 255, 255, 0.6);
     cursor: pointer;
@@ -565,6 +603,37 @@
     padding: 18px 20px;
     background: rgba(12, 16, 32, 0.22);
     transition: background-color 220ms ease, color 220ms ease;
+}
+
+.browser-upload-dropzone {
+    position: relative;
+}
+
+.browser-upload-dropzone.wails-drop-target-active::before {
+    content: '松开鼠标即可上传文件或文件夹';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 16;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+}
+
+.browser-upload-dropzone.wails-drop-target-active::after {
+    content: '';
+    position: absolute;
+    inset: 12px;
+    border-radius: 12px;
+    background: rgba(226, 232, 240, 0.2);
+    border: 1px dashed rgba(148, 163, 184, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+    z-index: 15;
+    pointer-events: none;
 }
 
 /* Bucket Grid */
@@ -987,6 +1056,21 @@ body.theme-light .file-browser .action-btn.danger:hover:not(:disabled) {
     color: #991b1b;
 }
 
+body.theme-light .file-browser .upload-menu {
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: 0 18px 50px -12px rgba(15, 23, 42, 0.25);
+}
+
+body.theme-light .file-browser .upload-menu-item {
+    color: rgba(15, 23, 42, 0.88);
+}
+
+body.theme-light .file-browser .upload-menu-item:hover {
+    background: rgba(15, 23, 42, 0.06);
+    color: #0f172a;
+}
+
 body.theme-light .file-browser .row-checkbox {
     accent-color: #0284c7;
 }
@@ -1007,6 +1091,17 @@ body.theme-light .file-browser .file-table tbody tr.drop-target {
 
 body.theme-light .file-browser .browser-content {
     background: rgba(255, 255, 255, 0.45);
+}
+
+body.theme-light .file-browser .browser-upload-dropzone.wails-drop-target-active::before {
+    color: #0f172a;
+    text-shadow: none;
+}
+
+body.theme-light .file-browser .browser-upload-dropzone.wails-drop-target-active::after {
+    background: rgba(186, 230, 253, 0.34);
+    border: 1px dashed rgba(14, 165, 233, 0.45);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
 body.theme-light .file-browser .nav-btn {
