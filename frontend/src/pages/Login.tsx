@@ -162,157 +162,165 @@ function Login({ onLoginSuccess }: LoginProps) {
 
   return (
     <div className="login-container">
-      <div className="login-card">
-        <div className="login-header">
-          <h1 className="login-title">Walioss</h1>
-          <p className="login-subtitle">Connect to Alibaba Cloud OSS</p>
+      <div className="login-shell">
+        <div className="login-side">
+          <div className="login-side-brand">
+            <img className="login-side-icon" src="/appicon.png" alt="Walioss" />
+            <div className="login-side-brand-text">
+              <div className="login-side-title">Walioss</div>
+              <div className="login-side-subtitle">Profiles</div>
+            </div>
+          </div>
+
+          <div className="login-side-section">
+            <div className="login-side-section-title">Profile</div>
+            {profiles.length > 0 ? (
+              <ProfilePicker profiles={profiles} value={selectedProfile} onChange={handleProfileChange} />
+            ) : (
+              <div className="form-hint">No saved profiles yet.</div>
+            )}
+          </div>
         </div>
 
-        <div className="login-form">
-          {profiles.length > 0 && (
-            <div className="profile-section">
-              <ProfilePicker profiles={profiles} value={selectedProfile} onChange={handleProfileChange} />
-            </div>
-          )}
-
-          <div className="form-group">
-            <label className="form-label">AccessKey ID *</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Enter your AccessKey ID"
-              value={accessKeyId}
-              onChange={(e) => setAccessKeyId(e.target.value)}
-              autoComplete="off"
-            />
+        <div className="login-card">
+          <div className="login-header">
+            <h1 className="login-title">Walioss</h1>
+            <p className="login-subtitle">Connect to Alibaba Cloud OSS</p>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">AccessKey Secret *</label>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="Enter your AccessKey Secret"
-              value={accessKeySecret}
-              onChange={(e) => setAccessKeySecret(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="form-row">
+          <div className="login-form">
             <div className="form-group">
-              <label className="form-label">Region *</label>
+              <label className="form-label">AccessKey ID *</label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="e.g. cn-hangzhou"
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
+                placeholder="Enter your AccessKey ID"
+                value={accessKeyId}
+                onChange={(e) => setAccessKeyId(e.target.value)}
+                autoComplete="off"
               />
             </div>
+
             <div className="form-group">
-              <label className="form-label">Endpoint</label>
+              <label className="form-label">AccessKey Secret *</label>
               <input
-                type="text"
+                type="password"
                 className="form-input"
-                placeholder="Custom endpoint (optional)"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
+                placeholder="Enter your AccessKey Secret"
+                value={accessKeySecret}
+                onChange={(e) => setAccessKeySecret(e.target.value)}
+                autoComplete="off"
               />
-              {endpoint.toLowerCase().includes('oss-accesspoint') && (
-                <div className="form-hint" style={{ marginTop: '6px', opacity: 0.85, fontSize: '12px' }}>
-                  Tip: Access Point endpoints (…oss-accesspoint…) are bucket-scoped and cannot list buckets.
-                  Leave Endpoint empty or use a service endpoint like <code>oss-cn-hangzhou.aliyuncs.com</code>.
-                </div>
-              )}
             </div>
-          </div>
 
-          <div className="form-group">
-            <label className="form-label">Default Path</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="oss://bucket/prefix/ (optional)"
-              value={defaultPath}
-              onChange={(e) => setDefaultPath(e.target.value)}
-            />
-            <div className="form-hint" style={{ marginTop: '6px', opacity: 0.7, fontSize: '12px' }}>
-              For accounts without list-all-buckets permission, enter a path like <code>oss://bucket/folder/</code> to open directly after login.
-            </div>
-          </div>
-
-          <div className="save-profile-section">
-            <label>
-              <input
-                type="checkbox"
-                checked={saveAsProfile}
-                onChange={(e) => setSaveAsProfile(e.target.checked)}
-              />
-              Save as profile
-            </label>
-            {saveAsProfile && (
-              <>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Region *</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Profile name"
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  style={{ maxWidth: '150px' }}
+                  placeholder="e.g. cn-hangzhou"
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
                 />
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={setAsDefault}
-                    onChange={(e) => setSetAsDefault(e.target.checked)}
-                  />
-                  Default
-                </label>
-              </>
-            )}
-          </div>
-
-          {message && (
-            <div className={`message ${message.type}`}>
-              <span className="message-icon">
-                {message.type === 'success' && '✓'}
-                {message.type === 'error' && '✕'}
-                {message.type === 'info' && 'ℹ'}
-              </span>
-              <span>{message.text}</span>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Endpoint</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Custom endpoint (optional)"
+                  value={endpoint}
+                  onChange={(e) => setEndpoint(e.target.value)}
+                />
+                {endpoint.toLowerCase().includes('oss-accesspoint') && (
+                  <div className="form-hint" style={{ marginTop: '6px', opacity: 0.85, fontSize: '12px' }}>
+                    Tip: Access Point endpoints (…oss-accesspoint…) are bucket-scoped and cannot list buckets.
+                    Leave Endpoint empty or use a service endpoint like <code>oss-cn-hangzhou.aliyuncs.com</code>.
+                  </div>
+                )}
+              </div>
             </div>
-          )}
 
-          <div className="button-group">
-            <button
-              className="btn btn-secondary"
-              onClick={handleTestConnection}
-              disabled={testingConnection || loading}
-            >
-              {testingConnection ? (
-                <>
-                  <span className="spinner"></span>
-                  Testing...
-                </>
-              ) : (
-                'Test Connection'
-              )}
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={handleConnect}
-              disabled={loading || testingConnection}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner"></span>
-                  Connecting...
-                </>
-              ) : (
-                'Connect'
-              )}
-            </button>
+            <div className="form-group">
+              <label className="form-label">Default Path</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="oss://bucket/prefix/ (optional)"
+                value={defaultPath}
+                onChange={(e) => setDefaultPath(e.target.value)}
+              />
+              <div className="form-hint" style={{ marginTop: '6px', opacity: 0.7, fontSize: '12px' }}>
+                For accounts without list-all-buckets permission, enter a path like <code>oss://bucket/folder/</code> to
+                open directly after login.
+              </div>
+            </div>
+
+            <div className="form-group">
+              <div className="save-profile-section">
+                <label>
+                  <input type="checkbox" checked={saveAsProfile} onChange={(e) => setSaveAsProfile(e.target.checked)} />
+                  Save as profile
+                </label>
+                {saveAsProfile && (
+                  <>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Profile name"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                    />
+                    <label>
+                      <input type="checkbox" checked={setAsDefault} onChange={(e) => setSetAsDefault(e.target.checked)} />
+                      Default
+                    </label>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="button-group">
+              <button
+                className="btn btn-secondary"
+                onClick={handleTestConnection}
+                disabled={testingConnection || loading}
+              >
+                {testingConnection ? (
+                  <>
+                    <span className="spinner"></span>
+                    Testing...
+                  </>
+                ) : (
+                  'Test Connection'
+                )}
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleConnect}
+                disabled={loading || testingConnection}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner"></span>
+                    Connecting...
+                  </>
+                ) : (
+                  'Connect'
+                )}
+              </button>
+            </div>
+            {message && (
+              <div className={`message ${message.type}`}>
+                <span className="message-icon">
+                  {message.type === 'success' && '✓'}
+                  {message.type === 'error' && '✕'}
+                  {message.type === 'info' && 'ℹ'}
+                </span>
+                <span>{message.text}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
