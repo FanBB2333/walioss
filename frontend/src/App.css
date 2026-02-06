@@ -267,6 +267,10 @@ body.theme-light .dashboard-container::after {
     position: relative;
 }
 
+.window-tab.dragging {
+    opacity: 0.58;
+}
+
 .window-tab-number {
     min-width: 22px;
     height: 22px;

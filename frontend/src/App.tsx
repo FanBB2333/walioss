@@ -51,12 +51,36 @@ type AppInfo = {
   githubUrl?: string;
 };
 
+const TAB_REORDER_DRAG_TYPE = 'application/x-walioss-tab-reorder';
+
+const canReadTabReorderPayload = (dt: DataTransfer | null | undefined) => {
+  if (!dt) return false;
+  try {
+    return Array.from(dt.types || []).includes(TAB_REORDER_DRAG_TYPE);
+  } catch {
+    return false;
+  }
+};
+
+const readTabReorderPayload = (dt: DataTransfer | null | undefined, fallback: string | null) => {
+  if (dt) {
+    try {
+      const tabId = dt.getData(TAB_REORDER_DRAG_TYPE);
+      if (tabId) return tabId;
+    } catch {
+      // Ignore and fallback to local state.
+    }
+  }
+  return fallback;
+};
+
 function App() {
   const [globalView, setGlobalView] = useState<GlobalView>('session');
   const [theme, setTheme] = useState<string>('dark');
   const [newTabNameRule, setNewTabNameRule] = useState<'folder' | 'newTab'>('folder');
   const nextTabNumber = useRef(2);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const tabHoverSwitchTimerRef = useRef<number | null>(null);
   const tabHoverSwitchTargetRef = useRef<string | null>(null);
 
@@ -285,6 +309,8 @@ function App() {
     setSessionProfileName(null);
     setTransfers([]);
     setShowTransfers(false);
+    setDragOverTabId(null);
+    setDraggingTabId(null);
   };
 
   const openTab = (tabId: string) => {
@@ -304,7 +330,65 @@ function App() {
     return () => clearTabHoverSwitch();
   }, []);
 
+  const reorderTabs = (sourceTabId: string, targetTabId: string, placeAfter: boolean) => {
+    if (!sourceTabId || sourceTabId === targetTabId) return;
+    setTabs((prev) => {
+      const sourceIndex = prev.findIndex((t) => t.id === sourceTabId);
+      const targetIndex = prev.findIndex((t) => t.id === targetTabId);
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      if (!moved) return prev;
+
+      let insertIndex = targetIndex + (placeAfter ? 1 : 0);
+      if (sourceIndex < insertIndex) insertIndex -= 1;
+      insertIndex = Math.max(0, Math.min(insertIndex, next.length));
+      if (insertIndex === sourceIndex) return prev;
+
+      next.splice(insertIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const reorderTabsByPointer = (e: React.DragEvent, targetTabId: string, sourceTabId: string) => {
+    if (!sourceTabId || sourceTabId === targetTabId) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const placeAfter = e.clientX > rect.left + rect.width / 2;
+    reorderTabs(sourceTabId, targetTabId, placeAfter);
+  };
+
+  const handleTabDragStart = (e: React.DragEvent, tabId: string) => {
+    setDraggingTabId(tabId);
+    clearTabHoverSwitch();
+    setDragOverTabId(null);
+
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData(TAB_REORDER_DRAG_TYPE, tabId);
+      e.dataTransfer.setData('text/plain', tabId);
+    } catch {
+      // Some webviews may block custom mime types; local state is fallback.
+    }
+  };
+
+  const handleTabDragEnd = () => {
+    clearTabHoverSwitch();
+    setDragOverTabId(null);
+    setDraggingTabId(null);
+  };
+
   const handleTabDragEnter = (e: React.DragEvent, tabId: string) => {
+    if (canReadTabReorderPayload(e.dataTransfer) || draggingTabId) {
+      e.preventDefault();
+      const sourceTabId = readTabReorderPayload(e.dataTransfer, draggingTabId);
+      if (!sourceTabId) return;
+      reorderTabsByPointer(e, tabId, sourceTabId);
+      clearTabHoverSwitch();
+      setDragOverTabId(null);
+      return;
+    }
+
     if (!canReadOssDragPayload(e.dataTransfer)) return;
     e.preventDefault();
     setDragOverTabId(tabId);
@@ -320,6 +404,16 @@ function App() {
   };
 
   const handleTabDragOver = (e: React.DragEvent, tabId: string) => {
+    if (canReadTabReorderPayload(e.dataTransfer) || draggingTabId) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const sourceTabId = readTabReorderPayload(e.dataTransfer, draggingTabId);
+      if (sourceTabId) {
+        reorderTabsByPointer(e, tabId, sourceTabId);
+      }
+      return;
+    }
+
     if (!canReadOssDragPayload(e.dataTransfer)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -327,6 +421,8 @@ function App() {
   };
 
   const handleTabDragLeave = (e: React.DragEvent, tabId: string) => {
+    if (canReadTabReorderPayload(e.dataTransfer) || draggingTabId) return;
+
     const related = e.relatedTarget as Node | null;
     if (related && e.currentTarget.contains(related)) return;
     setDragOverTabId((prev) => (prev === tabId ? null : prev));
@@ -336,6 +432,17 @@ function App() {
   };
 
   const handleTabDrop = async (e: React.DragEvent, tab: AppTab) => {
+    const sourceTabId = readTabReorderPayload(e.dataTransfer, draggingTabId);
+    if (sourceTabId) {
+      e.preventDefault();
+      e.stopPropagation();
+      reorderTabsByPointer(e, tab.id, sourceTabId);
+      clearTabHoverSwitch();
+      setDragOverTabId(null);
+      setDraggingTabId(null);
+      return;
+    }
+
     if (!sessionConfig) return;
     const payload = readOssDragPayload(e.dataTransfer);
     if (!payload || !payload.items.length) return;
@@ -553,10 +660,13 @@ function App() {
                 {tabs.map((t, index) => (
                   <div
                     key={t.id}
-                    className={`window-tab ${t.id === activeTabId ? 'active' : ''} ${dragOverTabId === t.id ? 'drag-over' : ''}`}
+                    className={`window-tab ${t.id === activeTabId ? 'active' : ''} ${dragOverTabId === t.id ? 'drag-over' : ''} ${draggingTabId === t.id ? 'dragging' : ''}`}
                     role="button"
                     tabIndex={0}
+                    draggable={renamingTabId !== t.id}
                     onClick={() => openTab(t.id)}
+                    onDragStart={(e) => handleTabDragStart(e, t.id)}
+                    onDragEnd={handleTabDragEnd}
                     onDragEnter={(e) => handleTabDragEnter(e, t.id)}
                     onDragOver={(e) => handleTabDragOver(e, t.id)}
                     onDragLeave={(e) => handleTabDragLeave(e, t.id)}
