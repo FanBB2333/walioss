@@ -1,44 +1,148 @@
 
 # Walioss
-基于 Wails 的阿里云 OSS 桌面客户端，使用 `ossutil` 驱动列举/上传/下载。支持多标签页、快捷键、书签与上传下载队列。
 
-## 功能
-- 连接 OSS：登录后持久化配置，未保存的临时连接不产生书签历史。
-- 文件浏览：桶与前缀导航、面包屑、文件类型识别，右键或行内操作支持下载/删除。
-- 上传下载：顶部 ⇅ 面板显示进行中的传输，失败/成功状态可见。
-- 书签：针对当前配置保存路径，类似浏览器收藏，按配置隔离。
-- 标签页：可新建/关闭/重命名，编号徽标显示顺序，快捷键快速切换。
-- 主题与设置：支持亮/暗主题，设置 ossutil 路径。
+Walioss is a desktop Alibaba Cloud OSS client built with Wails + React.
+It is designed for daily bucket/object operations with a native-app style workflow: profile-based login, tabbed browsing, paged object listing, previews, bookmarks, and transfer tracking.
 
-## 前置依赖
-- Go 1.21+
-- Node.js 18+ 与 pnpm
-- ossutil v2（需可执行权限；可放在 `bin/ossutil` 或系统 PATH 中）
-- Wails CLI `npm install -g wails@v2`（或参考官方安装）
+Current app version: `v0.1.0`.
 
-## 开发/运行
+## Screenshots
+
+### Login & profile picker
+![Login](images/login.png)
+
+### File list (paged) + operations
+![File list](images/list_folder.png)
+
+### Fast folder jump from breadcrumbs
+![Fast folder jump](images/fast_folder_jump.png)
+
+### File preview
+![File preview](images/image_preview.png)
+
+### Bookmarks
+![Bookmarks](images/bookmarks.png)
+
+### Settings
+![Settings](images/settings.png)
+
+## Features
+
+### Connection & profiles
+- Save multiple OSS profiles and mark one as default.
+- Test connection before login.
+- Support `Default Path` (`oss://bucket/prefix/`) for users without `ListBuckets` permission.
+- Detect `ossutil` automatically (or configure a custom path in settings).
+
+### Navigation & tabs
+- Multi-tab workspace with add/close/rename support.
+- Keyboard shortcuts: `Cmd/Ctrl+T`, `Cmd/Ctrl+W`, `Cmd/Ctrl+1..9`.
+- Back/forward/up/refresh controls in each tab.
+- Editable address bar (`oss://...`) with breadcrumb navigation.
+- Hover breadcrumbs to open a subfolder popover (lazy loaded).
+- New tab naming rule in settings:
+  - `Current Folder`
+  - `New Tab`
+- If a tab is manually renamed, it stays fixed and no longer auto-updates.
+
+### Object listing & operations
+- Paged object listing with `Prev` / `Next` / jump-to-page / page size selector.
+- Column width resizing by dragging table header separators.
+- Full-width table layout (no horizontal scrolling in default view).
+- Row selection with checkboxes, multi-select, and `Shift` range selection.
+- Batch operations on selected rows:
+  - Move
+  - Delete
+- Per-item operations:
+  - Open folder
+  - Preview file
+  - Download file
+- Create folder, create empty file, upload file.
+- Drag-and-drop move:
+  - Into folders in the current table
+  - Into another tab
+- Custom in-app context menu (browser default context menu is disabled).
+
+### Preview
+- Supported preview types:
+  - Text/code
+  - Image
+  - Video
+  - PDF
+- Text preview includes lightweight syntax highlighting.
+- Editable text files can be saved back to OSS.
+- Preview metadata includes elapsed time, size, type, and object properties.
+- Click object path in preview header to copy.
+- Keyboard support:
+  - `Esc` closes preview
+  - Arrow keys (`↑↓←→`) navigate between previewable files
+
+### Transfers & notifications
+- Upload/download queue with live progress events.
+- Transfer modal with:
+  - Separate Uploads / Downloads tabs
+  - Search
+  - Progress, speed, ETA, and status
+  - Reveal/Open for completed downloads
+- Toast notifications for settings and operation feedback.
+
+### Appearance & app behavior
+- Dark/Light themes with smooth transitions.
+- Minimum window size is enforced (`900x760`).
+- About dialog shows app name/version from `appinfo.json` and GitHub link.
+
+## Tech stack
+- Backend: Go + Wails + Alibaba Cloud OSS SDK
+- Frontend: React + TypeScript + Vite
+- Transfer/runtime CLI integration: `ossutil`
+
+## Requirements
+- Go `1.23+`
+- Node.js `18+`
+- `pnpm` (recommended)
+- Wails CLI `v2.11+`
+- `ossutil v2` (in `PATH` or at `bin/ossutil`)
+
+## Run in development
+
 ```bash
-wails dev          # 开发调试
+# from project root
+pnpm -C frontend install
+wails dev
 ```
-首次运行会 `pnpm install` 前端依赖并生成 bindings。
 
-## 构建
+## Build locally
+
 ```bash
-wails build       # 生成桌面应用
+wails build -clean
 ```
 
-## 快捷键
-- Cmd/Ctrl+T：新建标签页
-- Cmd/Ctrl+W：关闭当前标签页
-- Cmd/Ctrl+1..9：切换到对应序号标签
-- 标签标题双击可重命名
+Build output is generated under `build/bin`.
 
-## 说明
-- 书签存储于本地（每个已保存配置独立），临时连接不可用。
-- 下载/上传操作通过 `ossutil cp`，如遇权限或网络异常，请检查凭证与网络。
-- 需要自定义 `ossutil` 路径可在设置中填写。
+## GitHub release automation
 
-## 致谢
+This repo includes `.github/workflows/release.yml`:
+- Trigger: push tag matching `v*` (for example `v0.1.0`)
+- Platform: macOS build only
+- Output: zipped app artifact attached to GitHub Release
+
+Example:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+## Local data
+
+Walioss stores local state under:
+- `~/.walioss/profiles.json`
+- `~/.walioss/settings.json`
+
+Bookmarks are stored in browser-like local storage, scoped by profile:
+- `oss-bookmarks:<profileName>`
+
+## Acknowledgements
 - [ossutil v1](https://github.com/aliyun/ossutil)
 - [ossutil v2](https://www.alibabacloud.com/help/en/oss/developer-reference/ossutil-overview/)
 - [oss-browser v1](https://github.com/aliyun/oss-browser)
