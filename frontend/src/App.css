@@ -8,6 +8,9 @@ html,
 body,
 #root {
     height: 100%;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -120,6 +123,7 @@ code,
     position: relative;
     background: none;
     overflow: hidden;
+    overscroll-behavior: none;
 }
 
 .dashboard-container::before,
@@ -259,8 +263,30 @@ body.theme-light .dashboard-container::after {
     padding: 0;
     overflow-x: auto;
     scrollbar-width: thin;
+    scrollbar-color: rgba(79, 172, 254, 0.7) rgba(255, 255, 255, 0.08);
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: none;
     min-width: 0;
     flex: 1;
+}
+
+.window-tabs::-webkit-scrollbar {
+    height: 8px;
+}
+
+.window-tabs::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+}
+
+.window-tabs::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(79, 172, 254, 0.9), rgba(0, 242, 254, 0.85));
+    border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.window-tabs::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(90deg, rgba(96, 165, 250, 1), rgba(34, 211, 238, 0.95));
 }
 
 .window-tab {
@@ -855,6 +881,23 @@ body.theme-light .transfer-summary-progress {
 
 body.theme-light .transfer-summary-speed {
     color: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-light .window-tabs {
+    scrollbar-color: rgba(2, 132, 199, 0.75) rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .window-tabs::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .window-tabs::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, rgba(2, 132, 199, 0.9), rgba(37, 99, 235, 0.88));
+    border-color: rgba(15, 23, 42, 0.16);
+}
+
+body.theme-light .window-tabs::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(90deg, rgba(3, 105, 161, 0.95), rgba(29, 78, 216, 0.92));
 }
 
 body.theme-light .window-tab {
