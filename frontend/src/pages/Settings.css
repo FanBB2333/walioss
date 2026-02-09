@@ -23,9 +23,12 @@
     width: 100%;
     min-height: 0;
     background: transparent;
-    padding: 18px 18px;
+    padding: 26px 18px 20px;
     overflow-y: auto;
     color: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
 }
 
 .settings-header {
@@ -38,11 +41,12 @@
 }
 
 .settings-tabs {
-    padding: 12px 18px 0 18px;
+    padding: 12px 18px 12px 18px;
     display: flex;
     gap: 8px;
     overflow-x: auto;
     scrollbar-width: none;
+    justify-content: center;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -110,11 +114,11 @@
 }
 
 .settings-content {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    width: min(760px, 100%);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
     gap: 18px;
-    align-content: start;
 }
 
 .settings-section {
@@ -253,7 +257,6 @@
 
 .save-btn {
     width: 100%;
-    grid-column: 1 / -1;
     padding: 12px;
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     border: none;
@@ -386,4 +389,14 @@ body.theme-light .settings-container .theme-option:hover {
 body.theme-light .settings-container .theme-option.active {
     background: rgba(79, 172, 254, 0.14);
     color: #0f172a;
+}
+
+@media (max-width: 760px) {
+    .settings-tabs {
+        justify-content: flex-start;
+    }
+
+    .settings-container {
+        padding: 20px 14px 16px;
+    }
 }
