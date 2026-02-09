@@ -155,6 +155,8 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     setThumbTick((t) => t + 1);
   }, [configSignature]);
   const lastSelectionIndexRef = useRef<number | null>(null);
+  const shiftPressedRef = useRef(false);
+  const checkboxPointerShiftRef = useRef(false);
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
 
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
@@ -207,6 +209,27 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
   });
 
   const tableVisible = !!currentBucket && objects.length > 0;
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') shiftPressedRef.current = true;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') shiftPressedRef.current = false;
+    };
+    const onWindowBlur = () => {
+      shiftPressedRef.current = false;
+      checkboxPointerShiftRef.current = false;
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onWindowBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onWindowBlur);
+    };
+  }, []);
 
   const storageKey = profileName ? `oss-bookmarks:${profileName}` : null;
   const bookmarkPopupWidthStorageKey = profileName ? `oss-bookmark-popup-width:${profileName}` : 'oss-bookmark-popup-width:default';
@@ -1272,6 +1295,30 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     return obj.path.endsWith('/') || obj.name.endsWith('/');
   };
 
+  const applyRowSelectionChange = (obj: main.ObjectInfo, rowIndex: number, checked: boolean, shiftRange: boolean) => {
+    if (!obj.path) return;
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      const last = lastSelectionIndexRef.current;
+
+      if (shiftRange && last !== null && last >= 0 && last < objects.length) {
+        const start = Math.min(last, rowIndex);
+        const end = Math.max(last, rowIndex);
+        for (let i = start; i <= end; i++) {
+          const item = objects[i];
+          if (!item?.path) continue;
+          if (checked) next.add(item.path);
+          else next.delete(item.path);
+        }
+      } else {
+        if (checked) next.add(obj.path);
+        else next.delete(obj.path);
+      }
+      return next;
+    });
+    lastSelectionIndexRef.current = rowIndex;
+  };
+
   const ensureThumbUrl = useCallback(
     async (obj: main.ObjectInfo) => {
       if (!obj?.path) return;
@@ -1827,30 +1874,33 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 	                    ))}
 		                  </colgroup>
 		                  <thead>
-		                    <tr>
-		                      <th className="select-col">
-		                        <input
-		                          ref={selectAllRef}
-		                          type="checkbox"
-		                          className="row-checkbox"
-		                          checked={allSelectedOnPage}
-		                          onClick={(e) => e.stopPropagation()}
-		                          onChange={(e) => {
-		                            const checked = e.target.checked;
-		                            setSelectedPaths((prev) => {
-		                              const next = new Set(prev);
-		                              for (const obj of objects) {
-		                                if (!obj.path) continue;
-		                                if (checked) next.add(obj.path);
-		                                else next.delete(obj.path);
-		                              }
-		                              return next;
-		                            });
-		                          }}
-		                          aria-label="Select all"
-		                          title="Select all"
-		                        />
-		                      </th>
+			                    <tr>
+			                      <th className="select-col">
+			                        <label className="row-checkbox-hitbox" onClick={(e) => e.stopPropagation()}>
+			                          <input
+			                            ref={selectAllRef}
+			                            type="checkbox"
+			                            className="row-checkbox"
+			                            checked={allSelectedOnPage}
+			                            onPointerDown={(e) => e.stopPropagation()}
+			                            onClick={(e) => e.stopPropagation()}
+			                            onChange={(e) => {
+			                              const checked = e.target.checked;
+			                              setSelectedPaths((prev) => {
+			                                const next = new Set(prev);
+			                                for (const obj of objects) {
+			                                  if (!obj.path) continue;
+			                                  if (checked) next.add(obj.path);
+			                                  else next.delete(obj.path);
+			                                }
+			                                return next;
+			                              });
+			                            }}
+			                            aria-label="Select all"
+			                            title="Select all"
+			                          />
+			                        </label>
+			                      </th>
 		                      <th className="resizable">
 		                        <span className="th-label">Name</span>
 		                        <div className="col-resizer" onPointerDown={(e) => startColumnResize(1, e)} />
@@ -1884,41 +1934,28 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 		                        onDragLeave={(e) => handleRowDragLeave(e, obj)}
 		                        onDrop={(e) => void handleRowDrop(e, obj)}
 		                      >
-		                        <td className="select-col">
-		                          <input
-		                            type="checkbox"
-		                            className="row-checkbox"
-		                            checked={!!obj.path && selectedPaths.has(obj.path)}
-		                            onClick={(e) => e.stopPropagation()}
-		                            onChange={(e) => {
-		                              if (!obj.path) return;
-		                              const checked = e.target.checked;
-		                              const shiftKey = !!(e.nativeEvent as any)?.shiftKey;
-		                              setSelectedPaths((prev) => {
-		                                const next = new Set(prev);
-		                                const last = lastSelectionIndexRef.current;
-
-		                                if (shiftKey && last !== null && last >= 0 && last < objects.length) {
-		                                  const start = Math.min(last, rowIndex);
-		                                  const end = Math.max(last, rowIndex);
-		                                  for (let i = start; i <= end; i++) {
-		                                    const item = objects[i];
-		                                    if (!item?.path) continue;
-		                                    if (checked) next.add(item.path);
-		                                    else next.delete(item.path);
-		                                  }
-		                                } else {
-		                                  if (checked) next.add(obj.path);
-		                                  else next.delete(obj.path);
-		                                }
-		                                return next;
-		                              });
-		                              lastSelectionIndexRef.current = rowIndex;
-		                            }}
-		                            aria-label={`Select ${obj.name}`}
-		                            title="Select"
-		                          />
-		                        </td>
+			                        <td className="select-col">
+			                          <label className="row-checkbox-hitbox" onClick={(e) => e.stopPropagation()}>
+			                            <input
+			                              type="checkbox"
+			                              className="row-checkbox"
+			                              checked={!!obj.path && selectedPaths.has(obj.path)}
+			                              onPointerDown={(e) => {
+			                                checkboxPointerShiftRef.current = !!e.shiftKey;
+			                                e.stopPropagation();
+			                              }}
+			                              onClick={(e) => e.stopPropagation()}
+			                              onChange={(e) => {
+			                                const checked = e.target.checked;
+			                                const shiftRange = checkboxPointerShiftRef.current || shiftPressedRef.current;
+			                                checkboxPointerShiftRef.current = false;
+			                                applyRowSelectionChange(obj, rowIndex, checked, shiftRange);
+			                              }}
+			                              aria-label={`Select ${obj.name}`}
+			                              title="Select"
+			                            />
+			                          </label>
+			                        </td>
 		                        <td className="file-name-td">
 			                          <div
 			                            className="file-name-cell"
