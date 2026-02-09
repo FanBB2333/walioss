@@ -185,7 +185,7 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
     return {
       grouped,
       standalone: standaloneVisible,
-      rootIds: [...grouped.map((g) => g.group.id), ...standaloneVisible.map((t) => t.id)],
+      groupIds: grouped.map((g) => g.group.id),
       query: q,
       taskCount: grouped.length + standaloneVisible.length,
     };
@@ -213,9 +213,9 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
   };
   const handleExpandAll = () => {
     setExpandedItemIds((prev) => {
-      if (view.rootIds.length === 0) return prev;
+      if (view.groupIds.length === 0) return prev;
       const next = { ...prev };
-      for (const id of view.rootIds) {
+      for (const id of view.groupIds) {
         next[id] = true;
       }
       return next;
@@ -223,9 +223,9 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
   };
   const handleCollapseAll = () => {
     setExpandedItemIds((prev) => {
-      if (view.rootIds.length === 0) return prev;
+      if (view.groupIds.length === 0) return prev;
       const next = { ...prev };
-      for (const id of view.rootIds) {
+      for (const id of view.groupIds) {
         next[id] = false;
       }
       return next;
@@ -271,27 +271,37 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
       </div>
     );
 
+  const renderStatusMeta = (t: TransferRecord, isCompleted: boolean, speedForMeta?: number) => (
+    <div className={`transfer-status-meta ${isCompleted ? 'completed' : ''}`} aria-label="Transfer summary">
+      <div className="transfer-status-meta-item">
+        <span className="meta-label">Size</span>
+        <span className="meta-value">{formatBytes(getTransferSizeBytes(t))}</span>
+      </div>
+      <div className="transfer-status-meta-item">
+        <span className="meta-label">{isCompleted ? 'Avg speed' : 'Speed'}</span>
+        <span className="meta-value">{formatSpeed(speedForMeta)}</span>
+      </div>
+      {!isCompleted && (
+        <div className="transfer-status-meta-item">
+          <span className="meta-label">ETA</span>
+          <span className="meta-value">{formatEta(t.etaSeconds)}</span>
+        </div>
+      )}
+    </div>
+  );
+
   const renderTransferCard = (t: TransferRecord) => {
     const progress = formatProgress(t.doneBytes, t.totalBytes);
     const showProgress = t.status === 'in-progress' || t.status === 'queued';
     const isCompleted = isTransferCompleted(t.status);
     const speedForMeta = isCompleted ? getTransferAverageSpeed(t) || t.speedBytesPerSec : t.speedBytesPerSec;
     const ossPath = `oss://${t.bucket}/${t.key}`;
-    const expanded = isItemExpanded(t.id);
 
     return (
-      <div key={t.id} className="transfer-card">
+      <div key={t.id} className="transfer-card transfer-single-card">
         <div className="transfer-card-top">
           <div className="transfer-main">
             <div className="transfer-title-row">
-              <button
-                className="transfer-expand-toggle"
-                type="button"
-                aria-label={expanded ? 'Collapse task details' : 'Expand task details'}
-                onClick={() => toggleItemExpanded(t.id)}
-              >
-                {expanded ? '▾' : '▸'}
-              </button>
               {renderTypeMark(t.type)}
               <div className="transfer-name" title={t.name}>
                 {t.name}
@@ -312,47 +322,26 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
               </button>
             )}
           </div>
-          <div className="transfer-status">
+          <div className="transfer-status transfer-status-single">
             <span className={`transfer-badge ${t.status}`}>{t.status}</span>
-            {renderCompletedSummary(t)}
+            {renderStatusMeta(t, isCompleted, speedForMeta)}
           </div>
         </div>
 
-        {expanded && (
-          <>
-            {showProgress && (
-              <div className="transfer-progress">
-                <div className="transfer-progress-bar">
-                  <div className="transfer-progress-fill" style={{ width: `${progress}%` }} />
-                </div>
-                <div className="transfer-progress-meta">
-                  <span>{t.totalBytes ? `${formatBytes(t.doneBytes)} / ${formatBytes(t.totalBytes)}` : '-'}</span>
-                  <span>{progress > 0 ? `${progress.toFixed(1)}%` : '-'}</span>
-                </div>
-              </div>
-            )}
-
-            <div className={`transfer-meta-row ${isCompleted ? 'completed' : ''}`}>
-              <div className="transfer-meta-item">
-                <div className="meta-label">Size</div>
-                <div className="meta-value">{formatBytes(getTransferSizeBytes(t))}</div>
-              </div>
-              <div className="transfer-meta-item">
-                <div className="meta-label">{isCompleted ? 'Avg speed' : 'Speed'}</div>
-                <div className="meta-value">{formatSpeed(speedForMeta)}</div>
-              </div>
-              {!isCompleted && (
-                <div className="transfer-meta-item">
-                  <div className="meta-label">ETA</div>
-                  <div className="meta-value">{formatEta(t.etaSeconds)}</div>
-                </div>
-              )}
+        {showProgress && (
+          <div className="transfer-progress transfer-progress-short">
+            <div className="transfer-progress-bar">
+              <div className="transfer-progress-fill" style={{ width: `${progress}%` }} />
             </div>
-
-            {t.message && <div className="transfer-message">{t.message}</div>}
-            {renderTransferActions(t)}
-          </>
+            <div className="transfer-progress-meta">
+              <span>{t.totalBytes ? `${formatBytes(t.doneBytes)} / ${formatBytes(t.totalBytes)}` : '-'}</span>
+              <span>{progress > 0 ? `${progress.toFixed(1)}%` : '-'}</span>
+            </div>
+          </div>
         )}
+
+        {t.message && <div className="transfer-message">{t.message}</div>}
+        {renderTransferActions(t)}
       </div>
     );
   };
@@ -419,7 +408,7 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                 className="transfer-bulk-btn"
                 type="button"
                 onClick={handleExpandAll}
-                disabled={view.taskCount <= 0}
+                disabled={view.groupIds.length <= 0}
               >
                 Expand All
               </button>
@@ -427,7 +416,7 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                 className="transfer-bulk-btn"
                 type="button"
                 onClick={handleCollapseAll}
-                disabled={view.taskCount <= 0}
+                disabled={view.groupIds.length <= 0}
               >
                 Collapse All
               </button>

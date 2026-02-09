@@ -443,6 +443,21 @@ body.theme-light .dashboard-container::after {
     color: rgba(255, 255, 255, 0.8);
 }
 
+.transfer-summary.idle {
+    min-width: 168px;
+    max-width: 228px;
+}
+
+.transfer-summary.idle .transfer-summary-row {
+    grid-template-columns: 52px minmax(40px, 1fr) auto;
+}
+
+.transfer-summary.idle .transfer-summary-progress {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 9px;
+}
+
 .transfer-summary-row {
     display: grid;
     grid-template-columns: 64px minmax(120px, 1fr) auto;
@@ -526,7 +541,7 @@ body.theme-light .dashboard-container::after {
     background: rgba(255, 255, 255, 0.1);
 }
 
-.transfer-badge {
+.transfer-btn-badge {
     position: absolute;
     top: -6px;
     right: -6px;
@@ -1014,7 +1029,7 @@ body.theme-light .transfer-btn:hover {
     background: rgba(15, 23, 42, 0.08);
 }
 
-body.theme-light .transfer-badge {
+body.theme-light .transfer-btn-badge {
     background: #ef4444;
 }
 

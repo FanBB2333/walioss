@@ -297,6 +297,10 @@
     min-width: 136px;
 }
 
+.transfer-status-single {
+    min-width: 248px;
+}
+
 .transfer-header-meta {
     display: inline-grid;
     grid-template-columns: repeat(2, minmax(0, auto));
@@ -317,6 +321,37 @@
 }
 
 .transfer-header-meta-item .meta-value {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.transfer-status-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, auto));
+    gap: 8px;
+}
+
+.transfer-status-meta.completed {
+    grid-template-columns: repeat(2, minmax(0, auto));
+}
+
+.transfer-status-meta-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 0;
+}
+
+.transfer-status-meta-item .meta-label {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.transfer-status-meta-item .meta-value {
     color: rgba(255, 255, 255, 0.9);
     font-size: 11px;
     font-weight: 700;
@@ -466,6 +501,11 @@
     gap: 6px;
 }
 
+.transfer-progress-short {
+    width: min(320px, 56%);
+    margin-left: auto;
+}
+
 .transfer-progress-bar {
     height: 10px;
     border-radius: 999px;
@@ -562,6 +602,38 @@
 
 .transfer-action-btn.primary:hover {
     background: rgba(79, 172, 254, 0.25);
+}
+
+@media (max-width: 880px) {
+    .transfer-single-card .transfer-card-top {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .transfer-status-single {
+        min-width: 0;
+        width: 100%;
+        align-items: flex-start;
+    }
+
+    .transfer-status-single .transfer-status-meta {
+        width: 100%;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .transfer-status-single .transfer-status-meta.completed {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .transfer-status-single .transfer-status-meta-item {
+        align-items: flex-start;
+    }
+
+    .transfer-progress-short {
+        width: 100%;
+        max-width: none;
+        margin-left: 0;
+    }
 }
 
 /* Theme (Light) */
@@ -740,6 +812,14 @@ body.theme-light .transfer-header-meta-item .meta-label {
 }
 
 body.theme-light .transfer-header-meta-item .meta-value {
+    color: rgba(15, 23, 42, 0.88);
+}
+
+body.theme-light .transfer-status-meta-item .meta-label {
+    color: rgba(15, 23, 42, 0.5);
+}
+
+body.theme-light .transfer-status-meta-item .meta-value {
     color: rgba(15, 23, 42, 0.88);
 }
 

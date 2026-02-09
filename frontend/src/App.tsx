@@ -103,7 +103,7 @@ const formatBytesCompact = (bytes?: number) => {
 };
 
 const formatSpeedCompact = (bytesPerSec?: number) => {
-  if (!bytesPerSec || !Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return '-';
+  if (!bytesPerSec || !Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return '0 B/s';
   return `${formatBytesCompact(bytesPerSec)}/s`;
 };
 
@@ -136,7 +136,7 @@ const summarizeTransfers = (items: TransferItem[], type: TransferType): Transfer
 };
 
 const formatSummaryProgress = (summary: TransferSummary) => {
-  if (summary.taskCount <= 0) return '-';
+  if (summary.taskCount <= 0) return 'idle';
   if (summary.totalBytes > 0 && summary.progressPercent !== null) {
     return `${formatBytesCompact(summary.doneBytes)} / ${formatBytesCompact(summary.totalBytes)} (${summary.progressPercent.toFixed(1)}%)`;
   }
@@ -424,6 +424,12 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (showTransfers && toast) {
+      setToast(null);
+    }
+  }, [showTransfers, toast]);
 
   const ensureAppInfo = useCallback(async () => {
     if (aboutLoading || appInfo) return;
@@ -851,6 +857,7 @@ function App() {
   }, [activeTabId, tabs]);
 
   const inProgressCount = transferSummary.upload.taskCount + transferSummary.download.taskCount;
+  const transferSummaryIdle = transferSummary.upload.taskCount <= 0 && transferSummary.download.taskCount <= 0;
 
   return (
     <>
@@ -879,7 +886,7 @@ function App() {
 	            <div className="header-info">
 	              {sessionConfig && (
                   <div
-                    className="transfer-summary"
+                    className={`transfer-summary ${transferSummaryIdle ? 'idle' : ''}`}
                     title={[
                       `Upload: ${formatSummaryProgress(transferSummary.upload)} @ ${formatSpeedCompact(transferSummary.upload.speedBytesPerSec)}`,
                       `Download: ${formatSummaryProgress(transferSummary.download)} @ ${formatSpeedCompact(transferSummary.download.speedBytesPerSec)}`,
@@ -909,7 +916,7 @@ function App() {
                     title="传输进度"
                   >
                     ⇅
-                    {inProgressCount > 0 && <span className="transfer-badge">{inProgressCount}</span>}
+                    {inProgressCount > 0 && <span className="transfer-btn-badge">{inProgressCount}</span>}
                   </button>
                 </div>
               )}
