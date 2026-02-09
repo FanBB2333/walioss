@@ -1227,11 +1227,16 @@ func (s *OSSService) runOssutilWithProgress(args []string, update *TransferUpdat
 
 	outputTail := newRingBuffer(16 * 1024)
 	emitInterval := 250 * time.Millisecond
+	staleSpeedAfter := 2 * time.Second
 	var lastEmit time.Time
 
 	var mu sync.Mutex
 	doneBytes := update.DoneBytes
-	speedBps := update.SpeedBytesPerSec
+	cliSpeedBps := update.SpeedBytesPerSec
+	derivedSpeedBps := 0.0
+	lastDoneSampleBytes := doneBytes
+	var lastDoneSampleAt time.Time
+	var lastProgressAt time.Time
 
 	emit := func(force bool) {
 		now := time.Now()
@@ -1242,9 +1247,16 @@ func (s *OSSService) runOssutilWithProgress(args []string, update *TransferUpdat
 
 		mu.Lock()
 		update.DoneBytes = doneBytes
-		update.SpeedBytesPerSec = speedBps
-		if update.TotalBytes > 0 && speedBps > 0 && doneBytes >= 0 && doneBytes <= update.TotalBytes {
-			update.EtaSeconds = int64(float64(update.TotalBytes-doneBytes) / speedBps)
+		effectiveSpeedBps := derivedSpeedBps
+		if effectiveSpeedBps <= 0 && cliSpeedBps > 0 {
+			effectiveSpeedBps = cliSpeedBps
+		}
+		if !lastProgressAt.IsZero() && now.Sub(lastProgressAt) > staleSpeedAfter {
+			effectiveSpeedBps = 0
+		}
+		update.SpeedBytesPerSec = effectiveSpeedBps
+		if update.TotalBytes > 0 && effectiveSpeedBps > 0 && doneBytes >= 0 && doneBytes <= update.TotalBytes {
+			update.EtaSeconds = int64(float64(update.TotalBytes-doneBytes) / effectiveSpeedBps)
 		} else {
 			update.EtaSeconds = 0
 		}
@@ -1274,31 +1286,76 @@ func (s *OSSService) runOssutilWithProgress(args []string, update *TransferUpdat
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- cmd.Wait() }()
 
-	for seg := range segments {
-		seg = stripANSI(seg)
-		p := parseProgressSegment(seg)
+	ticker := time.NewTicker(emitInterval)
+	defer ticker.Stop()
 
-		mu.Lock()
-		if p.hasDone {
-			doneBytes = p.doneBytes
-		} else if p.hasPercent && update.TotalBytes > 0 {
-			doneBytes = int64(float64(update.TotalBytes) * (p.percent / 100.0))
-		}
-		if p.hasSpeed {
-			speedBps = p.speedBps
-		}
-		mu.Unlock()
+	segmentsOpen := true
+	waitDone := false
+	for segmentsOpen || !waitDone {
+		select {
+		case seg, ok := <-segments:
+			if !ok {
+				segmentsOpen = false
+				continue
+			}
 
-		if p.hasDone || p.hasSpeed || p.hasPercent {
+			seg = stripANSI(seg)
+			p := parseProgressSegment(seg)
+			if p.hasDone || p.hasSpeed || p.hasPercent {
+				now := time.Now()
+
+				mu.Lock()
+				if p.hasDone {
+					doneBytes = p.doneBytes
+				} else if p.hasPercent && update.TotalBytes > 0 {
+					doneBytes = int64(float64(update.TotalBytes) * (p.percent / 100.0))
+				}
+
+				if p.hasDone || p.hasPercent {
+					if !lastDoneSampleAt.IsZero() {
+						delta := doneBytes - lastDoneSampleBytes
+						elapsed := now.Sub(lastDoneSampleAt)
+						if delta > 0 && elapsed > 0 {
+							instant := float64(delta) / elapsed.Seconds()
+							if derivedSpeedBps <= 0 {
+								derivedSpeedBps = instant
+							} else {
+								const alpha = 0.35
+								derivedSpeedBps = (1-alpha)*derivedSpeedBps + alpha*instant
+							}
+						} else if delta < 0 {
+							derivedSpeedBps = 0
+						}
+					}
+					lastDoneSampleAt = now
+					lastDoneSampleBytes = doneBytes
+					lastProgressAt = now
+				}
+
+				if p.hasSpeed {
+					cliSpeedBps = p.speedBps
+					if derivedSpeedBps <= 0 && p.speedBps > 0 {
+						derivedSpeedBps = p.speedBps
+					}
+					lastProgressAt = now
+				}
+				mu.Unlock()
+
+				emit(false)
+				continue
+			}
+
+			// Non-progress output for debugging/errors.
+			outputTail.AppendLine(strings.TrimSpace(seg))
+		case <-ticker.C:
+			// Heartbeat: keep transfer card updates alive even when ossutil output is sparse.
 			emit(false)
-			continue
+		case err = <-waitCh:
+			waitDone = true
+			waitCh = nil
 		}
-
-		// Non-progress output for debugging/errors.
-		outputTail.AppendLine(strings.TrimSpace(seg))
 	}
 
-	err = <-waitCh
 	if err != nil {
 		tail := outputTail.String()
 		if tail != "" {
