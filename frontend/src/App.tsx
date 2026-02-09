@@ -27,6 +27,7 @@ type TransferView = 'all' | TransferType;
 
 type TransferItem = {
   id: string;
+  profileName?: string;
   name: string;
   type: TransferType;
   bucket: string;
@@ -68,6 +69,7 @@ type TransferSummary = {
 
 const TAB_REORDER_DRAG_TYPE = 'application/x-walioss-tab-reorder';
 const TRANSFER_DERIVED_SPEED_STALE_MS = 6000;
+const TRANSFER_PROFILE_ANONYMOUS = '__anonymous__';
 
 const canReadTabReorderPayload = (dt: DataTransfer | null | undefined) => {
   if (!dt) return false;
@@ -141,6 +143,12 @@ const formatSummaryProgress = (summary: TransferSummary) => {
   return `${summary.taskCount} task${summary.taskCount > 1 ? 's' : ''}`;
 };
 
+const normalizeTransferProfileName = (profileName: unknown) => {
+  if (typeof profileName !== 'string') return TRANSFER_PROFILE_ANONYMOUS;
+  const normalized = profileName.trim();
+  return normalized || TRANSFER_PROFILE_ANONYMOUS;
+};
+
 const finiteNumber = (value: unknown) => {
   if (typeof value !== 'number') return undefined;
   return Number.isFinite(value) ? value : undefined;
@@ -177,6 +185,7 @@ function App() {
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
   const appDisplayName = appInfo?.name?.trim() || 'Walioss';
   const appDisplayVersion = appInfo?.version?.trim() || '';
+  const activeTransferProfile = useMemo(() => normalizeTransferProfileName(sessionProfileName), [sessionProfileName]);
   const transferSummary = useMemo(() => {
     return {
       upload: summarizeTransfers(transfers, 'upload'),
@@ -343,6 +352,7 @@ function App() {
 
     return {
       id: update.id,
+      profileName: normalizeTransferProfileName(update.profileName ?? previous?.profileName),
       name: update.name || previous?.name || 'Transfer',
       type: update.type || previous?.type || 'download',
       bucket: update.bucket || previous?.bucket || '',
@@ -368,6 +378,13 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!sessionConfig) {
+      setTransfers([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const loadTransferHistory = async () => {
       try {
         const history = await GetTransferHistory();
@@ -377,7 +394,8 @@ function App() {
         const normalized = history
           .filter((item: any) => !!item?.id)
           .map((item: any) => toTransferItem(item));
-        setTransfers(normalized);
+        const filtered = normalized.filter((item) => normalizeTransferProfileName(item.profileName) === activeTransferProfile);
+        setTransfers(filtered);
       } catch (error) {
         console.error('Failed to load transfer history:', error);
       }
@@ -386,7 +404,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [toTransferItem]);
+  }, [activeTransferProfile, sessionConfig, toTransferItem]);
 
   const showToast = useCallback((type: ToastType, message: string, timeoutMs = 2600) => {
     const id = Date.now();
@@ -444,8 +462,11 @@ function App() {
 
   useEffect(() => {
     const off = EventsOn('transfer:update', (payload: any) => {
+      if (!sessionConfig) return;
       const update = payload as any;
       if (!update?.id) return;
+      const updateProfile = normalizeTransferProfileName(update?.profileName);
+      if (updateProfile !== activeTransferProfile) return;
 
       if (update?.isGroup && update?.status === 'queued' && (update?.type === 'upload' || update?.type === 'download')) {
         setTransferView(update.type as TransferType);
@@ -466,7 +487,7 @@ function App() {
       });
     });
     return () => off();
-  }, [toTransferItem]);
+  }, [activeTransferProfile, sessionConfig, toTransferItem]);
 
   useEffect(() => {
     const off = EventsOn('app:about', () => {
@@ -511,6 +532,7 @@ function App() {
     setSessionConfig(config);
     setGlobalView('session');
     setSessionProfileName(profileName || null);
+    setTransfers([]);
     setShowTransfers(false);
     setTabs((prev) =>
       prev.map((t) =>
@@ -533,6 +555,7 @@ function App() {
     setActiveTabId('t1');
     nextTabNumber.current = 2;
     setSessionProfileName(null);
+    setTransfers([]);
     setShowTransfers(false);
     setDragOverTabId(null);
     setDraggingTabId(null);

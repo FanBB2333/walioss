@@ -182,6 +182,7 @@ export namespace main {
 	}
 	export class TransferUpdate {
 	    id: string;
+	    profileName?: string;
 	    type: string;
 	    status: string;
 	    name: string;
@@ -210,6 +211,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.profileName = source["profileName"];
 	        this.type = source["type"];
 	        this.status = source["status"];
 	        this.name = source["name"];

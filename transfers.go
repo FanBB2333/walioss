@@ -42,12 +42,15 @@ const (
 
 const (
 	transferHistoryFileName        = "transfers.json"
+	transferHistorySchemaVersion   = 2
+	transferProfileAnonymous       = "__anonymous__"
 	maxTransferHistoryRecords      = 3000
 	transferHistoryPersistInterval = 500 * time.Millisecond
 )
 
 type TransferUpdate struct {
 	ID               string         `json:"id"`
+	ProfileName      string         `json:"profileName,omitempty"`
 	Type             TransferType   `json:"type"`
 	Status           TransferStatus `json:"status"`
 	Name             string         `json:"name"`
@@ -68,6 +71,11 @@ type TransferUpdate struct {
 	StartedAtMs      int64          `json:"startedAtMs,omitempty"`
 	UpdatedAtMs      int64          `json:"updatedAtMs,omitempty"`
 	FinishedAtMs     int64          `json:"finishedAtMs,omitempty"`
+}
+
+type transferHistoryStore struct {
+	SchemaVersion int                         `json:"schemaVersion"`
+	Profiles      map[string][]TransferUpdate `json:"profiles"`
 }
 
 type transferLimiter struct {
@@ -171,6 +179,129 @@ func isTransferFinalStatus(status TransferStatus) bool {
 	return status == TransferStatusSuccess || status == TransferStatusError
 }
 
+func normalizeTransferProfileName(profileName string) string {
+	profileName = strings.TrimSpace(profileName)
+	if profileName == "" {
+		return transferProfileAnonymous
+	}
+	return profileName
+}
+
+func transferHistoryStorageID(profileName string, transferID string) string {
+	return normalizeTransferProfileName(profileName) + "::" + strings.TrimSpace(transferID)
+}
+
+func normalizeTransferDefaultPath(defaultPath string) string {
+	bucket, prefix, ok := parseDefaultPathLocation(defaultPath)
+	if !ok {
+		return strings.TrimSpace(defaultPath)
+	}
+	if prefix == "" {
+		return fmt.Sprintf("oss://%s", bucket)
+	}
+	return fmt.Sprintf("oss://%s/%s", bucket, prefix)
+}
+
+func transferConfigSignature(config OSSConfig) string {
+	return strings.Join([]string{
+		strings.TrimSpace(config.AccessKeyID),
+		strings.TrimSpace(config.AccessKeySecret),
+		normalizeRegion(config.Region),
+		normalizeEndpoint(config.Endpoint),
+		normalizeTransferDefaultPath(config.DefaultPath),
+	}, "\x1f")
+}
+
+func (s *OSSService) resolveTransferProfileName(config OSSConfig) string {
+	target := transferConfigSignature(config)
+	if target == "" {
+		return transferProfileAnonymous
+	}
+
+	state, err := s.loadAppState()
+	if err != nil {
+		return transferProfileAnonymous
+	}
+
+	for _, profile := range state.Profiles {
+		if transferConfigSignature(profile.Config) == target {
+			return normalizeTransferProfileName(profile.Name)
+		}
+	}
+	return transferProfileAnonymous
+}
+
+func decodeTransferHistoryPayload(data []byte) []TransferUpdate {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return []TransferUpdate{}
+	}
+
+	var store transferHistoryStore
+	if err := json.Unmarshal([]byte(trimmed), &store); err == nil && (store.SchemaVersion > 0 || store.Profiles != nil) {
+		out := make([]TransferUpdate, 0, 128)
+		profileKeys := make([]string, 0, len(store.Profiles))
+		for profileName := range store.Profiles {
+			profileKeys = append(profileKeys, profileName)
+		}
+		sort.Strings(profileKeys)
+
+		for _, profileName := range profileKeys {
+			groupProfile := normalizeTransferProfileName(profileName)
+			for _, item := range store.Profiles[profileName] {
+				if strings.TrimSpace(item.ProfileName) == "" {
+					item.ProfileName = groupProfile
+				} else {
+					item.ProfileName = normalizeTransferProfileName(item.ProfileName)
+				}
+				out = append(out, item)
+			}
+		}
+		return out
+	}
+
+	var legacy []TransferUpdate
+	if err := json.Unmarshal([]byte(trimmed), &legacy); err == nil {
+		for i := range legacy {
+			legacy[i].ProfileName = normalizeTransferProfileName(legacy[i].ProfileName)
+		}
+		return legacy
+	}
+
+	return []TransferUpdate{}
+}
+
+func buildTransferHistoryStore(history []TransferUpdate) transferHistoryStore {
+	store := transferHistoryStore{
+		SchemaVersion: transferHistorySchemaVersion,
+		Profiles:      make(map[string][]TransferUpdate),
+	}
+	for _, item := range history {
+		profileName := normalizeTransferProfileName(item.ProfileName)
+		item.ProfileName = profileName
+		store.Profiles[profileName] = append(store.Profiles[profileName], item)
+	}
+	return store
+}
+
+func (s *OSSService) findTransferProfileByIDLocked(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	for i := len(s.transferHistoryOrder) - 1; i >= 0; i-- {
+		storageID := s.transferHistoryOrder[i]
+		item, ok := s.transferHistoryByID[storageID]
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(item.ID) == id {
+			return normalizeTransferProfileName(item.ProfileName)
+		}
+	}
+	return ""
+}
+
 func (s *OSSService) transferHistoryPathIn(dir string) string {
 	return filepath.Join(dir, transferHistoryFileName)
 }
@@ -199,18 +330,52 @@ func (s *OSSService) copyTransferHistoryIfNeeded(previousDir string, nextDir str
 	_ = os.WriteFile(newPath, data, 0o600)
 }
 
-func (s *OSSService) trimTransferHistoryLocked() {
+func (s *OSSService) trimTransferHistoryByProfileLocked(profileName string) {
+	profileName = normalizeTransferProfileName(profileName)
 	if maxTransferHistoryRecords < 1 {
 		return
 	}
-	overflow := len(s.transferHistoryOrder) - maxTransferHistoryRecords
+
+	count := 0
+	for _, storageID := range s.transferHistoryOrder {
+		item, ok := s.transferHistoryByID[storageID]
+		if !ok {
+			continue
+		}
+		if normalizeTransferProfileName(item.ProfileName) == profileName {
+			count++
+		}
+	}
+
+	overflow := count - maxTransferHistoryRecords
 	if overflow <= 0 {
 		return
 	}
-	for i := 0; i < overflow; i++ {
-		delete(s.transferHistoryByID, s.transferHistoryOrder[i])
+
+	nextOrder := make([]string, 0, len(s.transferHistoryOrder)-overflow)
+	for _, storageID := range s.transferHistoryOrder {
+		item, ok := s.transferHistoryByID[storageID]
+		if !ok {
+			continue
+		}
+		if overflow > 0 && normalizeTransferProfileName(item.ProfileName) == profileName {
+			delete(s.transferHistoryByID, storageID)
+			overflow--
+			continue
+		}
+		nextOrder = append(nextOrder, storageID)
 	}
-	s.transferHistoryOrder = append([]string(nil), s.transferHistoryOrder[overflow:]...)
+	s.transferHistoryOrder = nextOrder
+}
+
+func (s *OSSService) trimTransferHistoryAllProfilesLocked() {
+	profiles := make(map[string]struct{}, 8)
+	for _, item := range s.transferHistoryByID {
+		profiles[normalizeTransferProfileName(item.ProfileName)] = struct{}{}
+	}
+	for profileName := range profiles {
+		s.trimTransferHistoryByProfileLocked(profileName)
+	}
 }
 
 func (s *OSSService) transferHistorySnapshotLocked() []TransferUpdate {
@@ -248,7 +413,8 @@ func (s *OSSService) persistTransferHistory(path string, history []TransferUpdat
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(history, "", "  ")
+	store := buildTransferHistoryStore(history)
+	data, err := json.MarshalIndent(store, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -275,10 +441,7 @@ func (s *OSSService) ensureTransferHistoryLoadedLocked() {
 		return
 	}
 
-	var history []TransferUpdate
-	if err := json.Unmarshal(data, &history); err != nil {
-		return
-	}
+	history := decodeTransferHistoryPayload(data)
 
 	now := time.Now().UnixMilli()
 	for _, item := range history {
@@ -286,6 +449,7 @@ func (s *OSSService) ensureTransferHistoryLoadedLocked() {
 		if id == "" {
 			continue
 		}
+		item.ProfileName = normalizeTransferProfileName(item.ProfileName)
 
 		if item.Status == TransferStatusQueued || item.Status == TransferStatusInProgress {
 			item.Status = TransferStatusError
@@ -302,18 +466,19 @@ func (s *OSSService) ensureTransferHistoryLoadedLocked() {
 			}
 		}
 
-		if existing, exists := s.transferHistoryByID[id]; exists {
+		storageID := transferHistoryStorageID(item.ProfileName, id)
+		if existing, exists := s.transferHistoryByID[storageID]; exists {
 			if transferSortTimestamp(item) >= transferSortTimestamp(existing) {
-				s.transferHistoryByID[id] = item
+				s.transferHistoryByID[storageID] = item
 			}
 			continue
 		}
 
-		s.transferHistoryByID[id] = item
-		s.transferHistoryOrder = append(s.transferHistoryOrder, id)
+		s.transferHistoryByID[storageID] = item
+		s.transferHistoryOrder = append(s.transferHistoryOrder, storageID)
 	}
 
-	s.trimTransferHistoryLocked()
+	s.trimTransferHistoryAllProfilesLocked()
 }
 
 func (s *OSSService) recordTransferUpdate(update TransferUpdate) {
@@ -330,11 +495,20 @@ func (s *OSSService) recordTransferUpdate(update TransferUpdate) {
 	s.transferHistoryMu.Lock()
 	s.ensureTransferHistoryLoadedLocked()
 
-	if _, exists := s.transferHistoryByID[id]; !exists {
-		s.transferHistoryOrder = append(s.transferHistoryOrder, id)
+	profileName := normalizeTransferProfileName(update.ProfileName)
+	if profileName == transferProfileAnonymous {
+		if existingProfile := s.findTransferProfileByIDLocked(id); existingProfile != "" {
+			profileName = existingProfile
+		}
 	}
-	s.transferHistoryByID[id] = update
-	s.trimTransferHistoryLocked()
+	update.ProfileName = profileName
+	storageID := transferHistoryStorageID(profileName, id)
+
+	if _, exists := s.transferHistoryByID[storageID]; !exists {
+		s.transferHistoryOrder = append(s.transferHistoryOrder, storageID)
+	}
+	s.transferHistoryByID[storageID] = update
+	s.trimTransferHistoryByProfileLocked(profileName)
 
 	path, snapshot, shouldPersist := s.transferHistoryPersistPlanLocked(forcePersist)
 	s.transferHistoryMu.Unlock()
@@ -515,6 +689,10 @@ func buildUploadPlan(localPath string) (uploadPlan, error) {
 }
 
 func (s *OSSService) enqueueTransfer(config OSSConfig, update TransferUpdate, onUpdate func(TransferUpdate)) {
+	if strings.TrimSpace(update.ProfileName) == "" {
+		update.ProfileName = s.resolveTransferProfileName(config)
+	}
+	update.ProfileName = normalizeTransferProfileName(update.ProfileName)
 	s.emitTransfer(update, onUpdate)
 	go s.runTransfer(config, update, onUpdate)
 }
@@ -527,6 +705,10 @@ func (s *OSSService) enqueueTransferGroup(config OSSConfig, group TransferUpdate
 	if group.ID == "" {
 		group.ID = s.newTransferID()
 	}
+	if strings.TrimSpace(group.ProfileName) == "" {
+		group.ProfileName = s.resolveTransferProfileName(config)
+	}
+	group.ProfileName = normalizeTransferProfileName(group.ProfileName)
 	group.IsGroup = true
 	group.Status = TransferStatusQueued
 	group.FileCount = len(children)
@@ -547,6 +729,10 @@ func (s *OSSService) enqueueTransferGroup(config OSSConfig, group TransferUpdate
 		if child.ID == "" {
 			child.ID = s.newTransferID()
 		}
+		if strings.TrimSpace(child.ProfileName) == "" {
+			child.ProfileName = group.ProfileName
+		}
+		child.ProfileName = normalizeTransferProfileName(child.ProfileName)
 		child.ParentID = group.ID
 		child.Status = TransferStatusQueued
 		child.UpdatedAtMs = time.Now().UnixMilli()
