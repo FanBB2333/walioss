@@ -14,6 +14,7 @@ interface FileBrowserProps {
   profileName: string | null;
   initialPath?: string;
   onLocationChange?: (location: { bucket: string; prefix: string }) => void;
+  onNotify?: (toast: { type: 'success' | 'error' | 'info'; message: string }) => void;
 }
 
 // Columns: Select, Name, Size, Type, Last Modified, Actions
@@ -93,7 +94,7 @@ type CrumbPopoverState = {
   error: string | null;
 };
 
-function FileBrowser({ config, profileName, initialPath, onLocationChange }: FileBrowserProps) {
+function FileBrowser({ config, profileName, initialPath, onLocationChange, onNotify }: FileBrowserProps) {
   const [currentBucket, setCurrentBucket] = useState('');
   const [currentPrefix, setCurrentPrefix] = useState('');
   const [navState, setNavState] = useState<{ stack: NavLocation[]; index: number }>({
@@ -2067,12 +2068,13 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange }: Fil
 	        isOpen={previewModalOpen}
 	        config={config}
 	        bucket={currentBucket}
-        object={previewObject}
-        onClose={() => setPreviewModalOpen(false)}
-        onDownload={(obj) => handleDownload(obj)}
-        onSaved={() => currentBucket && loadObjectsPage(currentBucket, currentPrefix, markerForPage(pageIndex), pageIndex)}
-        onNavigate={handlePreviewNavigate}
-      />
+	        object={previewObject}
+	        onClose={() => setPreviewModalOpen(false)}
+	        onDownload={(obj) => handleDownload(obj)}
+	        onSaved={() => currentBucket && loadObjectsPage(currentBucket, currentPrefix, markerForPage(pageIndex), pageIndex)}
+	        onNavigate={handlePreviewNavigate}
+          onNotify={onNotify}
+	      />
 
       {/* Properties Modal */}
       {propertiesModalOpen && contextMenu.object && (

@@ -15,6 +15,7 @@ const textExtensions = new Set([
   'md',
   'markdown',
   'json',
+  'jsonl',
   'jsonc',
   'yaml',
   'yml',
@@ -180,6 +181,20 @@ function highlightText(text: string) {
   return out;
 }
 
+function isLikelyTextContent(content: string) {
+  if (!content) return true;
+  const sample = content.slice(0, 8192);
+  let suspicious = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i);
+    if (code === 0) return false;
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+      suspicious++;
+    }
+  }
+  return suspicious / sample.length < 0.02;
+}
+
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const k = 1024;
@@ -215,6 +230,7 @@ interface FilePreviewModalProps {
   onDownload?: (obj: main.ObjectInfo) => void;
   onSaved?: () => void;
   onNavigate?: (direction: -1 | 1) => void;
+  onNotify?: (toast: { type: 'success' | 'error' | 'info'; message: string }) => void;
 }
 
 export default function FilePreviewModal({
@@ -226,6 +242,7 @@ export default function FilePreviewModal({
   onDownload,
   onSaved,
   onNavigate,
+  onNotify,
 }: FilePreviewModalProps) {
   const [kind, setKind] = useState<PreviewKind>('unsupported');
   const [loading, setLoading] = useState(false);
@@ -270,6 +287,12 @@ export default function FilePreviewModal({
     if (textExtensions.has(ext) || nameLower === 'dockerfile' || nameLower === 'makefile') return 'text';
     return 'unsupported';
   }, [object]);
+
+  const shouldTryTextFallback = useMemo(() => {
+    if (!object) return false;
+    if (kindFromName !== 'unsupported') return false;
+    return object.size <= MAX_TEXT_PREVIEW_BYTES;
+  }, [kindFromName, object]);
 
   const dirty = canEditText && text !== originalText;
 
@@ -323,6 +346,21 @@ export default function FilePreviewModal({
           setTruncated(!!object.size && object.size > maxBytes);
           return;
         }
+
+        if (shouldTryTextFallback) {
+          try {
+            const content = await GetObjectText(config, bucket, fileKey, MAX_TEXT_PREVIEW_BYTES);
+            if (isLikelyTextContent(content)) {
+              setKind('text');
+              setText(content);
+              setOriginalText(content);
+              setTruncated(!!object.size && object.size > MAX_TEXT_PREVIEW_BYTES);
+            }
+          } catch {
+            // Keep unsupported mode for non-text files.
+          }
+          return;
+        }
       } catch (err: any) {
         setError(err?.message || 'Preview failed');
       } finally {
@@ -332,7 +370,7 @@ export default function FilePreviewModal({
     };
 
     load();
-  }, [bucket, canEditText, config, fileKey, isOpen, kindFromName, object]);
+  }, [bucket, canEditText, config, fileKey, isOpen, kindFromName, object, shouldTryTextFallback]);
 
   useEffect(() => {
     if (!presignedUrl) return;
@@ -383,8 +421,10 @@ export default function FilePreviewModal({
     try {
       await navigator.clipboard.writeText(object.path);
       setPathCopyState('copied');
+      onNotify?.({ type: 'success', message: '已复制到剪贴板' });
     } catch {
       setPathCopyState('failed');
+      onNotify?.({ type: 'error', message: '复制路径失败' });
     }
     if (pathCopyTimerRef.current) {
       window.clearTimeout(pathCopyTimerRef.current);
@@ -571,7 +611,8 @@ export default function FilePreviewModal({
                 type="button"
                 onClick={handleCopyPath}
                 data-copy-state={pathCopyState}
-                title={pathCopyState === 'copied' ? 'Copied' : 'Click to copy'}
+                title={pathCopyState === 'copied' ? `已复制\n${object.path}` : `${object.path}\n点击复制完整路径`}
+                aria-label="点击复制完整路径"
               >
                 {object.path}
               </button>
@@ -580,13 +621,13 @@ export default function FilePreviewModal({
               <div className="meta-chip">
                 <span className="meta-label">Type</span>
                 <span className="meta-value">
-                  {kindFromName === 'text'
+                  {kind === 'text'
                     ? 'Text'
-                    : kindFromName === 'image'
+                    : kind === 'image'
                       ? 'Image'
-                      : kindFromName === 'video'
+                      : kind === 'video'
                         ? 'Video'
-                        : kindFromName === 'pdf'
+                        : kind === 'pdf'
                           ? 'PDF'
                           : 'File'}
                 </span>
@@ -603,7 +644,7 @@ export default function FilePreviewModal({
                   <span className="meta-value">{formatBytes(object.size)}</span>
                 </div>
               )}
-              {kindFromName === 'image' && imageResolution && (
+              {kind === 'image' && imageResolution && (
                 <div className="meta-chip">
                   <span className="meta-label">Resolution</span>
                   <span className="meta-value">
@@ -611,7 +652,7 @@ export default function FilePreviewModal({
                   </span>
                 </div>
               )}
-              {kindFromName === 'video' && videoMeta?.width && videoMeta?.height && (
+              {kind === 'video' && videoMeta?.width && videoMeta?.height && (
                 <div className="meta-chip">
                   <span className="meta-label">Resolution</span>
                   <span className="meta-value">
@@ -619,7 +660,7 @@ export default function FilePreviewModal({
                   </span>
                 </div>
               )}
-              {kindFromName === 'video' && videoMeta?.duration ? (
+              {kind === 'video' && videoMeta?.duration ? (
                 <div className="meta-chip">
                   <span className="meta-label">Duration</span>
                   <span className="meta-value">{formatDuration(videoMeta.duration)}</span>

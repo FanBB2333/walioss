@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
@@ -57,6 +57,14 @@ type AppInfo = {
   githubUrl?: string;
 };
 
+type TransferSummary = {
+  taskCount: number;
+  totalBytes: number;
+  doneBytes: number;
+  speedBytesPerSec: number;
+  progressPercent: number | null;
+};
+
 const TAB_REORDER_DRAG_TYPE = 'application/x-walioss-tab-reorder';
 
 const canReadTabReorderPayload = (dt: DataTransfer | null | undefined) => {
@@ -78,6 +86,57 @@ const readTabReorderPayload = (dt: DataTransfer | null | undefined, fallback: st
     }
   }
   return fallback;
+};
+
+const isTransferActive = (status: TransferStatus) => status === 'queued' || status === 'in-progress';
+
+const formatBytesCompact = (bytes?: number) => {
+  if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const exponent = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / Math.pow(1024, exponent);
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+};
+
+const formatSpeedCompact = (bytesPerSec?: number) => {
+  if (!bytesPerSec || !Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return '-';
+  return `${formatBytesCompact(bytesPerSec)}/s`;
+};
+
+const summarizeTransfers = (items: TransferItem[], type: TransferType): TransferSummary => {
+  const roots = items.filter((item) => !item.parentId && item.type === type && isTransferActive(item.status));
+  let totalBytes = 0;
+  let doneBytes = 0;
+  let speedBytesPerSec = 0;
+
+  for (const item of roots) {
+    const total = Math.max(0, item.totalBytes || 0);
+    const done = Math.max(0, item.doneBytes || 0);
+    if (total > 0) {
+      totalBytes += total;
+      doneBytes += Math.min(done, total);
+    }
+    if (item.status === 'in-progress' && (item.speedBytesPerSec || 0) > 0) {
+      speedBytesPerSec += item.speedBytesPerSec || 0;
+    }
+  }
+
+  const progressPercent = totalBytes > 0 ? Math.max(0, Math.min(100, (doneBytes / totalBytes) * 100)) : null;
+  return {
+    taskCount: roots.length,
+    totalBytes,
+    doneBytes,
+    speedBytesPerSec,
+    progressPercent,
+  };
+};
+
+const formatSummaryProgress = (summary: TransferSummary) => {
+  if (summary.taskCount <= 0) return '-';
+  if (summary.totalBytes > 0 && summary.progressPercent !== null) {
+    return `${formatBytesCompact(summary.doneBytes)} / ${formatBytesCompact(summary.totalBytes)} (${summary.progressPercent.toFixed(1)}%)`;
+  }
+  return `${summary.taskCount} task${summary.taskCount > 1 ? 's' : ''}`;
 };
 
 function App() {
@@ -109,6 +168,14 @@ function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
+  const appDisplayName = appInfo?.name?.trim() || 'Walioss';
+  const appDisplayVersion = appInfo?.version?.trim() || '';
+  const transferSummary = useMemo(() => {
+    return {
+      upload: summarizeTransfers(transfers, 'upload'),
+      download: summarizeTransfers(transfers, 'download'),
+    };
+  }, [transfers]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -288,6 +355,23 @@ function App() {
     setAboutOpen(true);
     void ensureAppInfo();
   }, [ensureAppInfo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const preloadAppInfo = async () => {
+      try {
+        const info = (await GetAppInfo()) as any;
+        if (cancelled) return;
+        setAppInfo(info as AppInfo);
+      } catch {
+        // Ignore preload failures; explicit About open still reports errors.
+      }
+    };
+    void preloadAppInfo();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const off = EventsOn('transfer:update', (payload: any) => {
@@ -674,7 +758,7 @@ function App() {
     };
   }, [activeTabId, tabs]);
 
-  const inProgressCount = transfers.filter((t) => !t.parentId && (t.status === 'in-progress' || t.status === 'queued')).length;
+  const inProgressCount = transferSummary.upload.taskCount + transferSummary.download.taskCount;
 
   return (
     <>
@@ -695,13 +779,36 @@ function App() {
 	              title="About"
 	            >
 	              <img className="app-icon" src="/appicon.png" alt="Walioss" />
-	              <h1 className="app-name">Walioss</h1>
+	              <div className="app-name-wrap">
+	                <h1 className="app-name">{appDisplayName}</h1>
+	                {appDisplayVersion && <span className="app-version">v{appDisplayVersion}</span>}
+	              </div>
 	            </div>
 	            <div className="header-info">
-              {sessionConfig && (
-                <div className="transfer-toggle">
-                  <button
-                    className="transfer-btn"
+	              {sessionConfig && (
+                  <div
+                    className="transfer-summary"
+                    title={[
+                      `Upload: ${formatSummaryProgress(transferSummary.upload)} @ ${formatSpeedCompact(transferSummary.upload.speedBytesPerSec)}`,
+                      `Download: ${formatSummaryProgress(transferSummary.download)} @ ${formatSpeedCompact(transferSummary.download.speedBytesPerSec)}`,
+                    ].join('\n')}
+                  >
+                    <div className="transfer-summary-row">
+                      <span className="transfer-summary-label up">↑ Up</span>
+                      <span className="transfer-summary-progress">{formatSummaryProgress(transferSummary.upload)}</span>
+                      <span className="transfer-summary-speed">{formatSpeedCompact(transferSummary.upload.speedBytesPerSec)}</span>
+                    </div>
+                    <div className="transfer-summary-row">
+                      <span className="transfer-summary-label down">↓ Down</span>
+                      <span className="transfer-summary-progress">{formatSummaryProgress(transferSummary.download)}</span>
+                      <span className="transfer-summary-speed">{formatSpeedCompact(transferSummary.download.speedBytesPerSec)}</span>
+                    </div>
+                  </div>
+                )}
+                {sessionConfig && (
+	                <div className="transfer-toggle">
+	                  <button
+	                    className="transfer-btn"
                     type="button"
                     onClick={() => {
                       setTransferView('download');
@@ -795,16 +902,17 @@ function App() {
             <Login onLoginSuccess={handleLoginSuccess} />
           ) : (
             <div className="window-stack">
-	              {tabs.map((t) => (
-	                <div key={t.id} className={`window-panel ${t.id === activeTabId ? 'active' : ''}`}>
-	                  <FileBrowser
-	                    config={sessionConfig}
-	                    profileName={sessionProfileName}
-	                    initialPath={sessionConfig.defaultPath}
-	                    onLocationChange={(loc) => handleTabLocationChange(t.id, loc.bucket, loc.prefix)}
-	                  />
-	                </div>
-	              ))}
+		              {tabs.map((t) => (
+		                <div key={t.id} className={`window-panel ${t.id === activeTabId ? 'active' : ''}`}>
+		                  <FileBrowser
+		                    config={sessionConfig}
+		                    profileName={sessionProfileName}
+		                    initialPath={sessionConfig.defaultPath}
+		                    onLocationChange={(loc) => handleTabLocationChange(t.id, loc.bucket, loc.prefix)}
+                        onNotify={(t) => showToast(t.type, t.message)}
+		                  />
+		                </div>
+		              ))}
 	            </div>
 	          )}
         </main>

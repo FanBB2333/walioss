@@ -160,8 +160,8 @@
     position: absolute;
     top: 44px;
     left: 0;
-    min-width: 300px;
-    max-width: 420px;
+    min-width: 340px;
+    max-width: min(680px, 80vw);
     padding: 8px;
     background: #1e1e36;
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -196,7 +196,7 @@
 
 .bookmark-popup-item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     padding: 10px 10px;
     border-radius: 10px;
@@ -211,6 +211,9 @@
 .bookmark-popup-main {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .bookmark-popup-label {
@@ -223,13 +226,15 @@
 }
 
 .bookmark-popup-path {
-    margin-top: 2px;
     font-size: 11px;
     color: rgba(255, 255, 255, 0.5);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
 }
 
 .bookmark-popup-remove {
@@ -245,6 +250,7 @@
     justify-content: center;
     padding: 0;
     flex-shrink: 0;
+    margin-top: 1px;
     transition: all 0.12s;
 }
 

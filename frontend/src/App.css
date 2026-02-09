@@ -237,6 +237,20 @@ body.theme-light .dashboard-container::after {
     background-clip: text;
 }
 
+.app-name-wrap {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.app-version {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.58);
+    letter-spacing: 0.02em;
+}
+
 .window-tabs {
     display: flex;
     align-items: center;
@@ -379,10 +393,87 @@ body.theme-light .dashboard-container::after {
 .header-info {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    --header-control-height: 38px;
     gap: 16px;
     font-size: 14px;
     color: rgba(255, 255, 255, 0.7);
     position: relative;
+}
+
+.transfer-summary {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-width: 240px;
+    max-width: min(520px, 60vw);
+    height: var(--header-control-height);
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.transfer-summary-row {
+    display: grid;
+    grid-template-columns: 64px minmax(120px, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    line-height: 1.05;
+}
+
+.transfer-summary-label {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    opacity: 0.9;
+}
+
+.transfer-summary-label.up {
+    color: #60a5fa;
+}
+
+.transfer-summary-label.down {
+    color: #34d399;
+}
+
+.transfer-summary-progress {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.transfer-summary-speed {
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.95);
+    text-align: right;
+}
+
+@media (max-width: 1180px) {
+    .transfer-summary {
+        max-width: min(420px, 56vw);
+    }
+
+    .transfer-summary-row {
+        grid-template-columns: 56px minmax(100px, 1fr) auto;
+        gap: 6px;
+    }
+}
+
+@media (max-width: 980px) {
+    .transfer-summary {
+        width: 100%;
+        max-width: 100%;
+        order: 2;
+    }
+
+    .header-info {
+        gap: 10px;
+    }
 }
 
 .transfer-toggle {
@@ -391,8 +482,8 @@ body.theme-light .dashboard-container::after {
 
 .transfer-btn {
     position: relative;
-    width: 38px;
-    height: 38px;
+    width: var(--header-control-height);
+    height: var(--header-control-height);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -594,11 +685,14 @@ body.theme-light .dashboard-container::after {
     background: rgba(239, 68, 68, 0.15);
     border: 1px solid rgba(239, 68, 68, 0.3);
     color: #f87171;
-    padding: 8px 16px;
+    height: var(--header-control-height);
+    padding: 0 16px;
     border-radius: 8px;
     font-size: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
 }
 
 .btn-logout:hover {
@@ -610,11 +704,14 @@ body.theme-light .dashboard-container::after {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.15);
     color: rgba(255, 255, 255, 0.8);
-    padding: 8px 16px;
+    height: var(--header-control-height);
+    padding: 0 16px;
     border-radius: 8px;
     font-size: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
 }
 
 .btn-settings:hover {
@@ -734,12 +831,30 @@ body.theme-light .app-name {
     background-clip: text;
 }
 
+body.theme-light .app-version {
+    color: rgba(15, 23, 42, 0.55);
+}
+
 body.theme-light .app-brand-clickable:hover {
     background: rgba(15, 23, 42, 0.04);
 }
 
 body.theme-light .header-info {
     color: rgba(15, 23, 42, 0.6);
+}
+
+body.theme-light .transfer-summary {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    color: rgba(15, 23, 42, 0.8);
+}
+
+body.theme-light .transfer-summary-progress {
+    color: rgba(15, 23, 42, 0.75);
+}
+
+body.theme-light .transfer-summary-speed {
+    color: rgba(15, 23, 42, 0.92);
 }
 
 body.theme-light .window-tab {
