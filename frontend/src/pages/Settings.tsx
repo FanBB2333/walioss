@@ -4,6 +4,16 @@ import { GetSettings, SaveSettings, CheckOssutilInstalled, GetOssutilPath, SetOs
 import '../components/Modal.css';
 import './Settings.css';
 
+type SettingsTabId = 'driver' | 'transfers' | 'appearance' | 'tabs' | 'connection';
+
+const SETTINGS_TABS: { id: SettingsTabId; label: string }[] = [
+  { id: 'driver', label: 'Driver' },
+  { id: 'transfers', label: 'Transfers' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'tabs', label: 'Tabs' },
+  { id: 'connection', label: 'Connection' },
+];
+
 interface SettingsProps {
   isOpen: boolean;
   onBack: () => void;
@@ -13,6 +23,7 @@ interface SettingsProps {
 }
 
 function Settings({ isOpen, onBack, onThemeChange, onNotify, onSettingsSaved }: SettingsProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('driver');
   const [settings, setSettings] = useState<main.AppSettings>({
     ossutilPath: '',
     workDir: '~/.walioss',
@@ -42,6 +53,11 @@ function Settings({ isOpen, onBack, onThemeChange, onNotify, onSettingsSaved }: 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onBack]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setActiveTab('driver');
+  }, [isOpen]);
 
   const loadSettings = async () => {
     try {
@@ -139,7 +155,7 @@ function Settings({ isOpen, onBack, onThemeChange, onNotify, onSettingsSaved }: 
   return (
     <div className="modal-overlay" onClick={onBack}>
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-container">
+        <div className="settings-top">
           <div className="settings-header">
             <h1 className="settings-title">Settings</h1>
             <button
@@ -153,129 +169,151 @@ function Settings({ isOpen, onBack, onThemeChange, onNotify, onSettingsSaved }: 
             </button>
           </div>
 
+        </div>
+        <div className="settings-tabs" role="tablist" aria-label="Settings categories">
+          {SETTINGS_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={`settings-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="settings-container">
           <div className="settings-content">
-            {/* Driver Configuration */}
-            <div className="settings-section">
-              <h2 className="section-title">Driver Configuration</h2>
-              <div className="form-group">
-                <label className="form-label">Ossutil Path</label>
-                <div className="form-inline">
+            {activeTab === 'driver' && (
+              <div className="settings-section">
+                <h2 className="section-title">Driver Configuration</h2>
+                <div className="form-group">
+                  <label className="form-label">Ossutil Path</label>
+                  <div className="form-inline">
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={settings.ossutilPath}
+                      onChange={(e) => setSettings({ ...settings, ossutilPath: e.target.value })}
+                      placeholder="Leave empty to use auto-detected ossutil"
+                    />
+                    <button
+                      className="back-btn form-inline-btn"
+                      type="button"
+                      onClick={handleTestOssutil}
+                      disabled={testingDriver || loading}
+                    >
+                      Test
+                    </button>
+                  </div>
+                  <div className="settings-hint">Leave empty to auto-detect ossutil from system PATH or bundled binary.</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Walioss Work Directory</label>
                   <input
                     type="text"
                     className="form-input"
-                    value={settings.ossutilPath}
-                    onChange={(e) => setSettings({ ...settings, ossutilPath: e.target.value })}
-                    placeholder="Leave empty to use auto-detected ossutil"
+                    value={settings.workDir || ''}
+                    onChange={(e) => setSettings({ ...settings, workDir: e.target.value })}
+                    placeholder="~/.walioss"
                   />
-                  <button className="back-btn form-inline-btn" type="button" onClick={handleTestOssutil} disabled={testingDriver || loading}>
-                    Test
-                  </button>
+                  <div className="settings-hint">Stores app configuration and profiles in JSON format.</div>
                 </div>
-                <div className="settings-hint">Leave empty to auto-detect ossutil from system PATH or bundled binary.</div>
+                {driverStatus && <div className={`settings-inline-message ${driverStatus.type}`}>{driverStatus.text}</div>}
+                {testingDriver && <div className="settings-hint">Testing driver...</div>}
               </div>
-              <div className="form-group">
-                <label className="form-label">Walioss Work Directory</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={settings.workDir || ''}
-                  onChange={(e) => setSettings({ ...settings, workDir: e.target.value })}
-                  placeholder="~/.walioss"
-                />
-                <div className="settings-hint">Stores app configuration and profiles in JSON format.</div>
-              </div>
-              {driverStatus && (
-                <div className={`settings-inline-message ${driverStatus.type}`}>
-                  {driverStatus.text}
+            )}
+
+            {activeTab === 'transfers' && (
+              <div className="settings-section">
+                <h2 className="section-title">Transfers</h2>
+                <div className="form-group">
+                  <label className="form-label">Max Concurrent Transfers</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={settings.maxTransferThreads ?? 3}
+                    min={1}
+                    max={64}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      setSettings({ ...settings, maxTransferThreads: Number.isFinite(v) ? v : 1 });
+                    }}
+                    placeholder="e.g., 3"
+                  />
                 </div>
-              )}
-              {testingDriver && (
-                <div className="settings-hint">Testing driver...</div>
-              )}
-            </div>
-
-            {/* Transfers */}
-            <div className="settings-section">
-              <h2 className="section-title">Transfers</h2>
-              <div className="form-group">
-                <label className="form-label">Max Concurrent Transfers</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={settings.maxTransferThreads ?? 3}
-                  min={1}
-                  max={64}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    setSettings({ ...settings, maxTransferThreads: Number.isFinite(v) ? v : 1 });
-                  }}
-                  placeholder="e.g., 3"
-                />
+                <div className="settings-hint">Increase this value to speed up transfers, but it may use more CPU and network resources.</div>
               </div>
-            </div>
+            )}
 
-            {/* Appearance */}
-            <div className="settings-section">
-              <h2 className="section-title">Appearance</h2>
-              <div className="form-group">
-                <label className="form-label">Theme</label>
-                <div className="theme-toggle">
-                  <div className={`theme-option ${settings.theme === 'dark' ? 'active' : ''}`} onClick={() => handleThemeSelect('dark')}>
-                    Dark
-                  </div>
-                  <div className={`theme-option ${settings.theme === 'light' ? 'active' : ''}`} onClick={() => handleThemeSelect('light')}>
-                    Light
+            {activeTab === 'appearance' && (
+              <div className="settings-section">
+                <h2 className="section-title">Appearance</h2>
+                <div className="form-group">
+                  <label className="form-label">Theme</label>
+                  <div className="theme-toggle">
+                    <div className={`theme-option ${settings.theme === 'dark' ? 'active' : ''}`} onClick={() => handleThemeSelect('dark')}>
+                      Dark
+                    </div>
+                    <div className={`theme-option ${settings.theme === 'light' ? 'active' : ''}`} onClick={() => handleThemeSelect('light')}>
+                      Light
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Tabs */}
-            <div className="settings-section">
-              <h2 className="section-title">Tabs</h2>
-              <div className="form-group">
-                <label className="form-label">New Tab Naming</label>
-                <div className="theme-toggle">
-                  <div
-                    className={`theme-option ${settings.newTabNameRule === 'folder' ? 'active' : ''}`}
-                    onClick={() => setSettings((prev) => ({ ...prev, newTabNameRule: 'folder' }))}
-                  >
-                    Current Folder
-                  </div>
-                  <div
-                    className={`theme-option ${settings.newTabNameRule === 'newTab' ? 'active' : ''}`}
-                    onClick={() => setSettings((prev) => ({ ...prev, newTabNameRule: 'newTab' }))}
-                  >
-                    New Tab
+            {activeTab === 'tabs' && (
+              <div className="settings-section">
+                <h2 className="section-title">Tabs</h2>
+                <div className="form-group">
+                  <label className="form-label">New Tab Naming</label>
+                  <div className="theme-toggle">
+                    <div
+                      className={`theme-option ${settings.newTabNameRule === 'folder' ? 'active' : ''}`}
+                      onClick={() => setSettings((prev) => ({ ...prev, newTabNameRule: 'folder' }))}
+                    >
+                      Current Folder
+                    </div>
+                    <div
+                      className={`theme-option ${settings.newTabNameRule === 'newTab' ? 'active' : ''}`}
+                      onClick={() => setSettings((prev) => ({ ...prev, newTabNameRule: 'newTab' }))}
+                    >
+                      New Tab
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Default Connection */}
-            <div className="settings-section">
-              <h2 className="section-title">Default Connection</h2>
-              <div className="form-group">
-                <label className="form-label">Default Region</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={settings.defaultRegion}
-                  onChange={(e) => setSettings({ ...settings, defaultRegion: e.target.value })}
-                  placeholder="e.g., cn-hangzhou"
-                />
+            {activeTab === 'connection' && (
+              <div className="settings-section">
+                <h2 className="section-title">Default Connection</h2>
+                <div className="form-group">
+                  <label className="form-label">Default Region</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={settings.defaultRegion}
+                    onChange={(e) => setSettings({ ...settings, defaultRegion: e.target.value })}
+                    placeholder="e.g., cn-hangzhou"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Default Endpoint</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={settings.defaultEndpoint}
+                    onChange={(e) => setSettings({ ...settings, defaultEndpoint: e.target.value })}
+                    placeholder="e.g., oss-cn-hangzhou.aliyuncs.com"
+                  />
+                </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">Default Endpoint</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={settings.defaultEndpoint}
-                  onChange={(e) => setSettings({ ...settings, defaultEndpoint: e.target.value })}
-                  placeholder="e.g., oss-cn-hangzhou.aliyuncs.com"
-                />
-              </div>
-            </div>
+            )}
 
             <button className="save-btn" type="button" onClick={handleSave} disabled={loading}>
               {loading ? 'Saving...' : 'Save Settings'}

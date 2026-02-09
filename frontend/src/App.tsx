@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import frontendPackage from '../package.json';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
 import AboutModal from './components/AboutModal';
 import FileBrowser from './components/FileBrowser';
 import TransferModal from './components/TransferModal';
 import { main } from '../wailsjs/go/models';
-import { GetSettings, GetTransferHistory, MoveObject } from '../wailsjs/go/main/OSSService';
+import { CheckOssutilInstalled, GetSettings, GetTransferHistory, MoveObject } from '../wailsjs/go/main/OSSService';
 import { GetAppInfo, OpenFile, OpenInFinder } from '../wailsjs/go/main/App';
 import { EventsEmit, EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { canReadOssDragPayload, readOssDragPayload } from './ossDrag';
@@ -144,6 +145,15 @@ const formatSummaryProgress = (summary: TransferSummary) => {
   return `${summary.taskCount} task${summary.taskCount > 1 ? 's' : ''}`;
 };
 
+const normalizeOssutilVersionLine = (message: string) => {
+  const line =
+    (message || '')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => !!l) || '';
+  return line || (message || '').trim() || '';
+};
+
 const normalizeTransferProfileName = (profileName: unknown) => {
   if (typeof profileName !== 'string') return TRANSFER_PROFILE_ANONYMOUS;
   const normalized = profileName.trim();
@@ -182,10 +192,12 @@ function App() {
   const [aboutOpen, setAboutOpen] = useState<boolean>(false);
   const [aboutLoading, setAboutLoading] = useState<boolean>(false);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [ossutilStatus, setOssutilStatus] = useState<{ ok: boolean; display: string; raw: string } | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
   const appDisplayName = appInfo?.name?.trim() || 'Walioss';
-  const appDisplayVersion = appInfo?.version?.trim() || '';
+  const packageVersion = typeof frontendPackage?.version === 'string' ? frontendPackage.version.trim() : '';
+  const appDisplayVersion = packageVersion || appInfo?.version?.trim() || '';
   const activeTransferProfile = useMemo(() => normalizeTransferProfileName(sessionProfileName), [sessionProfileName]);
   const transferSummary = useMemo(() => {
     return {
@@ -223,7 +235,7 @@ function App() {
   };
 
   useEffect(() => {
-  const applySavedTheme = async () => {
+    const applySavedTheme = async () => {
       try {
         const settings = await GetSettings();
         handleThemeChange(settings?.theme || 'dark');
@@ -231,8 +243,21 @@ function App() {
       } catch {
         handleThemeChange('dark');
       }
+
+      try {
+        const result = await CheckOssutilInstalled();
+        const raw = result?.message || '';
+        if (result?.success) {
+          const versionLine = normalizeOssutilVersionLine(raw);
+          setOssutilStatus({ ok: true, display: versionLine || 'Detected', raw });
+        } else {
+          setOssutilStatus({ ok: false, display: 'Unavailable', raw: raw || 'ossutil is not available' });
+        }
+      } catch (err: any) {
+        setOssutilStatus({ ok: false, display: 'Unavailable', raw: err?.message || 'ossutil check failed' });
+      }
     };
-    applySavedTheme();
+    void applySavedTheme();
   }, []);
 
   const folderNameFromPrefix = (prefix: string) => {
@@ -876,55 +901,63 @@ function App() {
 	                  openAbout();
 	                }
 	              }}
-	              title="About"
-	            >
-	              <img className="app-icon" src="/appicon.png" alt="Walioss" />
-	              <div className="app-name-wrap">
-	                <h1 className="app-name">{appDisplayName}</h1>
-	                {appDisplayVersion && <span className="app-version">v{appDisplayVersion}</span>}
-	              </div>
-	            </div>
-	            <div className="header-info">
-	              {sessionConfig && (
-                  <div
-                    className={`transfer-summary ${transferSummaryIdle ? 'idle' : ''}`}
-                    title={[
-                      `Upload: ${formatSummaryProgress(transferSummary.upload)} @ ${formatSpeedCompact(transferSummary.upload.speedBytesPerSec)}`,
-                      `Download: ${formatSummaryProgress(transferSummary.download)} @ ${formatSpeedCompact(transferSummary.download.speedBytesPerSec)}`,
-                    ].join('\n')}
-                  >
-                    <div className="transfer-summary-row">
-                      <span className="transfer-summary-label up">↑ Up</span>
-                      <span className="transfer-summary-progress">{formatSummaryProgress(transferSummary.upload)}</span>
-                      <span className="transfer-summary-speed">{formatSpeedCompact(transferSummary.upload.speedBytesPerSec)}</span>
-                    </div>
-                    <div className="transfer-summary-row">
-                      <span className="transfer-summary-label down">↓ Down</span>
-                      <span className="transfer-summary-progress">{formatSummaryProgress(transferSummary.download)}</span>
-                      <span className="transfer-summary-speed">{formatSpeedCompact(transferSummary.download.speedBytesPerSec)}</span>
-                    </div>
-                  </div>
-                )}
-                {sessionConfig && (
-	                <div className="transfer-toggle">
+		              title="About"
+		            >
+		              <img className="app-icon" src="/appicon.png" alt="Walioss" />
+		              <div className="app-titleblock">
+		                <div className="app-name-wrap">
+		                  <h1 className="app-name">{appDisplayName}</h1>
+		                  {appDisplayVersion && <span className="app-version">v{appDisplayVersion}</span>}
+		                </div>
+		                <div
+		                  className={`app-ossutil ${ossutilStatus ? (ossutilStatus.ok ? 'ok' : 'error') : 'pending'}`}
+		                  title={ossutilStatus?.raw || 'ossutil check pending'}
+		                >
+		                  ossutil: {ossutilStatus?.display || 'Checking…'}
+		                </div>
+		              </div>
+		            </div>
+		            <div className="header-info">
+		              {sessionConfig && (
 	                  <button
-                    className="transfer-btn"
-                    type="button"
-                    onClick={() => {
-                      setTransferView('all');
-                      setShowTransfers(true);
-                    }}
-                    title="传输进度"
-                  >
-                    ⇅
-                    {inProgressCount > 0 && <span className="transfer-btn-badge">{inProgressCount}</span>}
-                  </button>
-                </div>
-              )}
-              <span>Region: {sessionConfig?.region || '-'}</span>
-              <button className="btn-settings" onClick={() => setGlobalView('settings')}>
-                Settings
-              </button>
+	                    className={`transfer-summary transfer-summary-btn ${transferSummaryIdle ? 'idle' : ''}`}
+	                    type="button"
+	                    onClick={() => {
+	                      setTransferView('all');
+	                      setShowTransfers(true);
+	                    }}
+	                    title={[
+	                      `Upload: ${formatSummaryProgress(transferSummary.upload)} @ ${formatSpeedCompact(transferSummary.upload.speedBytesPerSec)}`,
+	                      `Download: ${formatSummaryProgress(transferSummary.download)} @ ${formatSpeedCompact(transferSummary.download.speedBytesPerSec)}`,
+	                    ].join('\n')}
+	                    aria-label="Transfers"
+	                  >
+	                    <span className="transfer-summary-icon" aria-hidden="true">
+	                      ⇅
+	                      {inProgressCount > 0 && <span className="transfer-summary-badge">{inProgressCount}</span>}
+	                    </span>
+	                    <div className="transfer-summary-body">
+	                      <div className="transfer-summary-row">
+	                        <span className="transfer-summary-label up">↑ Up</span>
+	                        <span className="transfer-summary-progress">{formatSummaryProgress(transferSummary.upload)}</span>
+	                        <span className="transfer-summary-speed">
+	                          {formatSpeedCompact(transferSummary.upload.speedBytesPerSec)}
+	                        </span>
+	                      </div>
+	                      <div className="transfer-summary-row">
+	                        <span className="transfer-summary-label down">↓ Down</span>
+	                        <span className="transfer-summary-progress">{formatSummaryProgress(transferSummary.download)}</span>
+	                        <span className="transfer-summary-speed">
+	                          {formatSpeedCompact(transferSummary.download.speedBytesPerSec)}
+	                        </span>
+	                      </div>
+	                    </div>
+	                  </button>
+	                )}
+	              <span>Region: {sessionConfig?.region || '-'}</span>
+	              <button className="btn-settings" onClick={() => setGlobalView('settings')}>
+	                Settings
+	              </button>
               {sessionConfig && (
                 <button className="btn-logout" onClick={handleLogout}>
                   Logout
@@ -1023,7 +1056,12 @@ function App() {
 	          onNotify={(t) => showToast(t.type, t.message)}
 	          onSettingsSaved={(settings) => applyNewTabNameRule(settings?.newTabNameRule === 'newTab' ? 'newTab' : 'folder')}
 	        />
-	        <AboutModal isOpen={aboutOpen} info={appInfo} loading={aboutLoading} onClose={() => setAboutOpen(false)} />
+		        <AboutModal
+		          isOpen={aboutOpen}
+		          info={appInfo ? { ...appInfo, version: appDisplayVersion || appInfo.version } : appInfo}
+		          loading={aboutLoading}
+		          onClose={() => setAboutOpen(false)}
+		        />
 	        <TransferModal
 	          isOpen={showTransfers}
 	          activeTab={transferView}
@@ -1033,11 +1071,11 @@ function App() {
           onReveal={(p) => OpenInFinder(p)}
           onOpen={(p) => OpenFile(p)}
         />
-        {toast && (
-          <div className={`toast toast-${toast.type}`} role="status">
-            <div className="toast-message">{toast.message}</div>
-            <button
-              className="toast-close"
+	        {toast && !showTransfers && (
+	          <div className={`toast toast-${toast.type}`} role="status">
+	            <div className="toast-message">{toast.message}</div>
+	            <button
+	              className="toast-close"
               type="button"
               aria-label="Dismiss notification"
               title="Dismiss"

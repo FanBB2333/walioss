@@ -13,6 +13,11 @@
     transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
+.settings-top {
+    padding: 18px 18px 10px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .settings-container {
     flex: 1;
     width: 100%;
@@ -28,9 +33,50 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 14px;
     width: 100%;
     min-height: 36px;
+}
+
+.settings-tabs {
+    padding: 12px 18px 0 18px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.settings-tab-btn {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.settings-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.settings-tab-btn.active {
+    background: rgba(79, 172, 254, 0.18);
+    border-color: rgba(79, 172, 254, 0.35);
+    color: #ffffff;
+}
+
+.settings-tab-btn:focus-visible {
+    outline: 2px solid rgba(79, 172, 254, 0.65);
+    outline-offset: 3px;
 }
 
 .settings-close-btn {
@@ -236,10 +282,35 @@ body.theme-light .settings-container {
     color: #0f172a;
 }
 
+body.theme-light .settings-top {
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
 body.theme-light .settings-modal {
     background: rgba(255, 255, 255, 0.95);
     border: 1px solid rgba(15, 23, 42, 0.1);
     box-shadow: 0 26px 80px -18px rgba(15, 23, 42, 0.25);
+}
+
+body.theme-light .settings-tabs {
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .settings-tab-btn {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    color: rgba(15, 23, 42, 0.75);
+}
+
+body.theme-light .settings-tab-btn:hover {
+    background: rgba(15, 23, 42, 0.06);
+    color: #0f172a;
+}
+
+body.theme-light .settings-tab-btn.active {
+    background: rgba(14, 165, 233, 0.14);
+    border-color: rgba(14, 165, 233, 0.35);
+    color: #0f172a;
 }
 
 body.theme-light .settings-container .settings-section {

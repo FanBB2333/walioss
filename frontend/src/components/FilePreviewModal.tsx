@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { main } from '../../wailsjs/go/models';
 import { GetObjectText, PresignObject, PutObjectText } from '../../wailsjs/go/main/OSSService';
 import './FilePreviewModal.css';
@@ -286,6 +286,7 @@ export default function FilePreviewModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [presignedUrl, setPresignedUrl] = useState<string>('');
+  const [presignedForPath, setPresignedForPath] = useState<string>('');
   const [mediaUrl, setMediaUrl] = useState<string>('');
   const [mediaFallbackTried, setMediaFallbackTried] = useState(false);
   const [text, setText] = useState<string>('');
@@ -299,6 +300,7 @@ export default function FilePreviewModal({
   const highlightLayerRef = useRef<HTMLPreElement>(null);
   const editorInputRef = useRef<HTMLTextAreaElement>(null);
   const pathCopyTimerRef = useRef<number | null>(null);
+  const loadSeqRef = useRef(0);
 
   const fileKey = useMemo(() => {
     if (!object?.path || !bucket) return '';
@@ -347,14 +349,17 @@ export default function FilePreviewModal({
     onClose();
   }, [dirty, onClose]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen || !object) return;
+    const seq = (loadSeqRef.current += 1);
+    const objectPath = object.path || '';
 
     setKind(kindFromName);
     setLoading(true);
     setSaving(false);
     setError(null);
     setPresignedUrl('');
+    setPresignedForPath('');
     setMediaUrl('');
     setMediaFallbackTried(false);
     setText('');
@@ -370,6 +375,7 @@ export default function FilePreviewModal({
       const startedAt = performance.now();
       try {
         if (!fileKey) {
+          if (loadSeqRef.current !== seq) return;
           setError('Invalid object path');
           setKind('unsupported');
           return;
@@ -377,13 +383,18 @@ export default function FilePreviewModal({
 
         if (kindFromName === 'image' || kindFromName === 'video' || kindFromName === 'pdf') {
           const url = await PresignObject(config, bucket, fileKey, '30m');
+          if (loadSeqRef.current !== seq) return;
+          setPresignedForPath(objectPath);
           setPresignedUrl(url);
+          setMediaUrl(url);
+          setMediaFallbackTried(false);
           return;
         }
 
         if (kindFromName === 'text') {
           const maxBytes = canEditText ? MAX_TEXT_EDIT_BYTES : MAX_TEXT_PREVIEW_BYTES;
           const content = await GetObjectText(config, bucket, fileKey, maxBytes);
+          if (loadSeqRef.current !== seq) return;
           setText(content);
           setOriginalText(content);
           setTruncated(!!object.size && object.size > maxBytes);
@@ -393,6 +404,7 @@ export default function FilePreviewModal({
         if (shouldTryTextFallback) {
           try {
             const content = await GetObjectText(config, bucket, fileKey, MAX_TEXT_PREVIEW_BYTES);
+            if (loadSeqRef.current !== seq) return;
             if (isLikelyTextContent(content)) {
               setKind('text');
               setText(content);
@@ -405,21 +417,17 @@ export default function FilePreviewModal({
           return;
         }
       } catch (err: any) {
+        if (loadSeqRef.current !== seq) return;
         setError(err?.message || 'Preview failed');
       } finally {
+        if (loadSeqRef.current !== seq) return;
         setLoadElapsedMs(performance.now() - startedAt);
         setLoading(false);
       }
     };
 
-    load();
+    void load();
   }, [bucket, canEditText, config, fileKey, isOpen, kindFromName, object, shouldTryTextFallback]);
-
-  useEffect(() => {
-    if (!presignedUrl) return;
-    setMediaUrl(presignedUrl);
-    setMediaFallbackTried(false);
-  }, [presignedUrl]);
 
   useEffect(() => {
     return () => {
@@ -476,7 +484,8 @@ export default function FilePreviewModal({
   };
 
   const handleMediaError = () => {
-    if (!presignedUrl) return;
+    if (!object?.path) return;
+    if (!presignedUrl || presignedForPath !== object.path) return;
     if (mediaFallbackTried) {
       setError((prev) => prev || 'Failed to load preview.');
       return;
@@ -502,6 +511,9 @@ export default function FilePreviewModal({
   }, [isOpen, kind, text]);
 
   if (!isOpen || !object) return null;
+
+  const effectivePresignedUrl = presignedForPath && presignedForPath === object.path ? presignedUrl : '';
+  const effectiveMediaUrl = presignedForPath && presignedForPath === object.path ? mediaUrl : '';
 
   const handleSave = async () => {
     if (!canEditText || !fileKey) return;
@@ -531,10 +543,10 @@ export default function FilePreviewModal({
     if (kind === 'image') {
       return (
         <div className="preview-media">
-          {presignedUrl ? (
+          {effectivePresignedUrl ? (
             <img
               className="preview-image"
-              src={mediaUrl || presignedUrl}
+              src={effectiveMediaUrl || effectivePresignedUrl}
               alt={object.name}
               onError={handleMediaError}
               onLoad={(e) => {
@@ -554,10 +566,10 @@ export default function FilePreviewModal({
     if (kind === 'video') {
       return (
         <div className="preview-media">
-          {presignedUrl ? (
+          {effectivePresignedUrl ? (
             <video
               className="preview-video"
-              src={mediaUrl || presignedUrl}
+              src={effectiveMediaUrl || effectivePresignedUrl}
               controls
               preload="metadata"
               onError={handleMediaError}
@@ -581,8 +593,13 @@ export default function FilePreviewModal({
     if (kind === 'pdf') {
       return (
         <div className="preview-media">
-          {presignedUrl ? (
-            <iframe className="preview-pdf" src={mediaUrl || presignedUrl} title={object.name} onError={handleMediaError} />
+          {effectivePresignedUrl ? (
+            <iframe
+              className="preview-pdf"
+              src={effectiveMediaUrl || effectivePresignedUrl}
+              title={object.name}
+              onError={handleMediaError}
+            />
           ) : (
             <div className="preview-empty">No preview URL</div>
           )}

@@ -874,13 +874,23 @@
     flex-shrink: 0;
 }
 
+.file-thumb {
+    width: 24px;
+    height: 24px;
+    display: block;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .folder-icon {
-    color: #fbbf24;
-    /* Folder icon: common amber/yellow */
+    color: #60a5fa;
+    /* Folder icon: common blue */
 }
 
 .item-icon {
-    color: #cbd5e1;
+    color: #94a3b8;
     /* File icon: neutral slate */
 }
 
@@ -1250,11 +1260,16 @@ body.theme-light .file-browser .file-table td {
 }
 
 body.theme-light .file-browser .folder-icon {
-    color: #d97706;
+    color: #2563eb;
 }
 
 body.theme-light .file-browser .item-icon {
-    color: #64748b;
+    color: #475569;
+}
+
+body.theme-light .file-browser .file-thumb {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
 body.theme-light .file-table tbody tr {

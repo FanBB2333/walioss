@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { main } from '../../wailsjs/go/models';
-import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueDownloadFolder, ListBuckets, ListObjectsPage, MoveObject } from '../../wailsjs/go/main/OSSService';
+import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueDownloadFolder, ListBuckets, ListObjectsPage, MoveObject, PresignObject } from '../../wailsjs/go/main/OSSService';
 import { SelectDirectory, SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
 import ConfirmationModal from './ConfirmationModal';
 import FilePreviewModal from './FilePreviewModal';
@@ -25,6 +25,29 @@ const DEFAULT_PAGE_SIZE = 200;
 const BOOKMARK_POPUP_DEFAULT_WIDTH = 560;
 const BOOKMARK_POPUP_MIN_WIDTH = 420;
 const BOOKMARK_POPUP_VIEWPORT_MARGIN = 56;
+
+const IMAGE_THUMB_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tif', 'tiff']);
+
+const getFileExtensionLower = (name: string) => {
+  const trimmed = (name || '').trim();
+  const dot = trimmed.lastIndexOf('.');
+  if (dot <= 0 || dot === trimmed.length - 1) return '';
+  return trimmed.slice(dot + 1).toLowerCase();
+};
+
+const isFolderObjectInfo = (obj: main.ObjectInfo) => {
+  if (!obj) return false;
+  if (obj.type === 'File') return false;
+  if (obj.type === 'Folder') return true;
+  return (obj.path || '').endsWith('/') || (obj.name || '').endsWith('/');
+};
+
+const isImageObjectInfo = (obj: main.ObjectInfo) => {
+  if (!obj) return false;
+  if (isFolderObjectInfo(obj)) return false;
+  const ext = getFileExtensionLower(obj.name || '');
+  return IMAGE_THUMB_EXTENSIONS.has(ext);
+};
 
 const clampBookmarkPopupWidth = (value: number) => {
   const viewportMax = typeof window !== 'undefined'
@@ -118,6 +141,19 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
   const selectAllRef = useRef<HTMLInputElement>(null);
+
+  const thumbUrlCacheRef = useRef<Map<string, string>>(new Map());
+  const thumbLoadingRef = useRef<Set<string>>(new Set());
+  const [_thumbTick, setThumbTick] = useState(0);
+  const configSignature = useMemo(() => {
+    return `${config.accessKeyId}|${config.endpoint}|${config.region}`;
+  }, [config.accessKeyId, config.endpoint, config.region]);
+
+  useEffect(() => {
+    thumbUrlCacheRef.current.clear();
+    thumbLoadingRef.current.clear();
+    setThumbTick((t) => t + 1);
+  }, [configSignature]);
   const lastSelectionIndexRef = useRef<number | null>(null);
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
 
@@ -1236,6 +1272,43 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     return obj.path.endsWith('/') || obj.name.endsWith('/');
   };
 
+  const ensureThumbUrl = useCallback(
+    async (obj: main.ObjectInfo) => {
+      if (!obj?.path) return;
+      if (!currentBucket) return;
+      if (!isImageObjectInfo(obj)) return;
+
+      const cacheKey = obj.path;
+      if (thumbUrlCacheRef.current.has(cacheKey)) return;
+      if (thumbLoadingRef.current.has(cacheKey)) return;
+      thumbLoadingRef.current.add(cacheKey);
+
+      try {
+        const ossPrefix = `oss://${currentBucket}/`;
+        const key = obj.path.startsWith(ossPrefix) ? obj.path.slice(ossPrefix.length) : '';
+        if (!key) return;
+
+        const url = await PresignObject(config, currentBucket, key, '30m');
+        if (!url) return;
+        thumbUrlCacheRef.current.set(cacheKey, url);
+        setThumbTick((t) => t + 1);
+      } catch {
+        // Ignore thumbnail failures and fall back to generic icons.
+      } finally {
+        thumbLoadingRef.current.delete(cacheKey);
+      }
+    },
+    [config, currentBucket],
+  );
+
+  useEffect(() => {
+    if (!currentBucket) return;
+    const candidates = objects.filter((o) => o?.path && isImageObjectInfo(o)).slice(0, 40);
+    for (const obj of candidates) {
+      void ensureThumbUrl(obj);
+    }
+  }, [currentBucket, ensureThumbUrl, objects]);
+
   const guessType = (name: string, fallback: string) => {
     const ext = name.split('.').pop()?.toLowerCase() || '';
     const map: Record<string, string> = {
@@ -1551,13 +1624,13 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
                     ))}
                   </div>
                 )}
-                <div
-                  className="bookmark-popup-resizer"
-                  onMouseDown={handleBookmarkPopupResizeStart}
-                  title="拖拽调整宽度"
-                />
-              </div>
-            )}
+	                <div
+	                  className="bookmark-popup-resizer"
+	                  onMouseDown={handleBookmarkPopupResizeStart}
+	                  title="Drag to resize"
+	                />
+	              </div>
+	            )}
           </div>
           <button className="nav-btn" onClick={handleGoBack} disabled={!canGoBack} title="Back">←</button>
           <button className="nav-btn" onClick={handleGoForward} disabled={!canGoForward} title="Forward">→</button>
@@ -1847,24 +1920,50 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 		                          />
 		                        </td>
 		                        <td className="file-name-td">
-		                          <div
-		                            className="file-name-cell"
-		                            draggable={!!obj.path && !operationLoading}
-		                            onDragStart={(e) => handleObjectDragStart(e, obj)}
-		                            onDragEnd={handleObjectDragEnd}
-		                            title="Drag to move"
-		                          >
-		                            <div className={`file-icon ${isFolder(obj) ? 'folder-icon' : 'item-icon'}`}>
-		                               {isFolder(obj) ? (
+			                          <div
+			                            className="file-name-cell"
+			                            draggable={!!obj.path && !operationLoading}
+			                            onDragStart={(e) => handleObjectDragStart(e, obj)}
+			                            onDragEnd={handleObjectDragEnd}
+			                            title="Drag to move"
+			                          >
+			                            <div
+			                              className={`file-icon ${isFolder(obj) ? 'folder-icon' : 'item-icon'}`}
+			                              onMouseEnter={() => {
+			                                if (!isImageObjectInfo(obj)) return;
+			                                void ensureThumbUrl(obj);
+			                              }}
+			                            >
+			                               {isFolder(obj) ? (
+			                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+		                                   <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+		                                 </svg>
+		                               ) : isImageObjectInfo(obj) ? (
+		                                 thumbUrlCacheRef.current.get(obj.path) ? (
+		                                   <img
+		                                     className="file-thumb"
+		                                     src={thumbUrlCacheRef.current.get(obj.path)}
+		                                     alt=""
+		                                     aria-hidden="true"
+		                                     draggable={false}
+		                                     loading="lazy"
+		                                     onError={() => {
+		                                       if (!obj.path) return;
+		                                       thumbUrlCacheRef.current.delete(obj.path);
+		                                       setThumbTick((t) => t + 1);
+		                                     }}
+		                                   />
+		                                 ) : (
+		                                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+		                                     <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+		                                   </svg>
+		                                 )
+		                               ) : (
 		                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-	                                   <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-	                                 </svg>
-	                               ) : (
-	                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-	                                   <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
-	                                 </svg>
-	                               )}
-	                            </div>
+		                                   <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+		                                 </svg>
+		                               )}
+			                            </div>
 	                            <span className="file-name-text">{obj.name}</span>
 	                          </div>
 	                        </td>
