@@ -21,7 +21,7 @@ interface FileBrowserProps {
 // Columns: Select, Name, Size, Type, Last Modified, Actions
 const DEFAULT_TABLE_COLUMN_WIDTHS = [44, 440, 110, 120, 190, 200];
 const MIN_TABLE_COLUMN_WIDTHS = [44, 180, 70, 80, 120, 160];
-const DEFAULT_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 100;
 const BOOKMARK_POPUP_DEFAULT_WIDTH = 560;
 const BOOKMARK_POPUP_MIN_WIDTH = 420;
 const BOOKMARK_POPUP_VIEWPORT_MARGIN = 56;
