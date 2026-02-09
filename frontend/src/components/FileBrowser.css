@@ -385,7 +385,7 @@
     justify-content: center;
     flex-shrink: 0;
     opacity: 0.9;
-    color: rgba(252, 165, 165, 0.92);
+    color: rgba(251, 191, 36, 0.95);
 }
 
 .crumb-popover-item-name {
@@ -875,13 +875,13 @@
 }
 
 .folder-icon {
-    color: #fca5a5;
-    /* Light red/orange for folders */
+    color: #fbbf24;
+    /* Folder icon: common amber/yellow */
 }
 
 .item-icon {
-    color: #93c5fd;
-    /* Light blue for files */
+    color: #cbd5e1;
+    /* File icon: neutral slate */
 }
 
 .file-name-text {
@@ -1186,6 +1186,10 @@ body.theme-light .file-browser .crumb-popover-item:hover {
     border-color: rgba(15, 23, 42, 0.08);
 }
 
+body.theme-light .file-browser .crumb-popover-item-icon {
+    color: #d97706;
+}
+
 body.theme-light .file-browser .crumb-popover-empty,
 body.theme-light .file-browser .crumb-popover-loading {
     color: rgba(15, 23, 42, 0.6);
@@ -1243,6 +1247,14 @@ body.theme-light .file-browser .col-resizer::after {
 
 body.theme-light .file-browser .file-table td {
     color: rgba(15, 23, 42, 0.9);
+}
+
+body.theme-light .file-browser .folder-icon {
+    color: #d97706;
+}
+
+body.theme-light .file-browser .item-icon {
+    color: #64748b;
 }
 
 body.theme-light .file-table tbody tr {
