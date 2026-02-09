@@ -234,6 +234,36 @@ export namespace main {
 	        this.finishedAtMs = source["finishedAtMs"];
 	    }
 	}
+	export class UploadNameCollision {
+	    name: string;
+	    fileExists: boolean;
+	    folderExists: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new UploadNameCollision(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.fileExists = source["fileExists"];
+	        this.folderExists = source["folderExists"];
+	    }
+	}
+	export class UploadRootSpec {
+	    localPath: string;
+	    remoteName?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UploadRootSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.localPath = source["localPath"];
+	        this.remoteName = source["remoteName"];
+	    }
+	}
 
 }
 

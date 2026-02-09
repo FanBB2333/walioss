@@ -6,6 +6,10 @@ export function CheckOssutilInstalled() {
   return window['go']['main']['OSSService']['CheckOssutilInstalled']();
 }
 
+export function CheckUploadNameCollisions(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['OSSService']['CheckUploadNameCollisions'](arg1, arg2, arg3, arg4);
+}
+
 export function CreateFile(arg1, arg2, arg3, arg4) {
   return window['go']['main']['OSSService']['CreateFile'](arg1, arg2, arg3, arg4);
 }
@@ -40,6 +44,10 @@ export function EnqueueUpload(arg1, arg2, arg3, arg4) {
 
 export function EnqueueUploadPaths(arg1, arg2, arg3, arg4) {
   return window['go']['main']['OSSService']['EnqueueUploadPaths'](arg1, arg2, arg3, arg4);
+}
+
+export function EnqueueUploadRoots(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['OSSService']['EnqueueUploadRoots'](arg1, arg2, arg3, arg4);
 }
 
 export function GetDefaultProfile() {

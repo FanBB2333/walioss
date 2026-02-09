@@ -5,6 +5,8 @@ import {context} from '../models';
 
 export function CheckOssutilInstalled():Promise<main.ConnectionResult>;
 
+export function CheckUploadNameCollisions(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:Array<string>):Promise<Array<main.UploadNameCollision>>;
+
 export function CreateFile(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function CreateFolder(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<void>;
@@ -22,6 +24,8 @@ export function EnqueueDownloadFolder(arg1:main.OSSConfig,arg2:string,arg3:strin
 export function EnqueueUpload(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function EnqueueUploadPaths(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:Array<string>):Promise<Array<string>>;
+
+export function EnqueueUploadRoots(arg1:main.OSSConfig,arg2:string,arg3:string,arg4:Array<main.UploadRootSpec>):Promise<Array<string>>;
 
 export function GetDefaultProfile():Promise<main.OSSProfile>;
 

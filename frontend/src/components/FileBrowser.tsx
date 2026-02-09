@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { main } from '../../wailsjs/go/models';
-import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueDownloadFolder, EnqueueUploadPaths, ListBuckets, ListObjectsPage, MoveObject } from '../../wailsjs/go/main/OSSService';
+import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueDownloadFolder, ListBuckets, ListObjectsPage, MoveObject } from '../../wailsjs/go/main/OSSService';
 import { SelectDirectory, SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
 import ConfirmationModal from './ConfirmationModal';
 import FilePreviewModal from './FilePreviewModal';
 import { EventsEmit, EventsOn } from '../../wailsjs/runtime/runtime';
 import { canReadOssDragPayload, OssDragPayload, readOssDragPayload, writeOssDragPayload } from '../ossDrag';
+import { enqueueUploadWithRenamePrompt } from '../upload';
 import './FileBrowser.css';
 import './Modal.css';
 
@@ -989,7 +990,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     if (!currentBucket) return;
     const cleaned = paths.map((p) => (p || '').trim()).filter((p) => !!p);
     if (cleaned.length === 0) return;
-    await EnqueueUploadPaths(config, currentBucket, currentPrefix, cleaned);
+    await enqueueUploadWithRenamePrompt(config, currentBucket, currentPrefix, cleaned);
   };
 
   const handleUploadFile = async () => {

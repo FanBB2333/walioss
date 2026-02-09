@@ -106,6 +106,36 @@ function transferTypeIcon(type: TransferType) {
   return type === 'upload' ? '↑' : '↓';
 }
 
+function transferStatusLabel(status: TransferStatus) {
+  switch (status) {
+    case 'queued':
+      return 'Queued';
+    case 'in-progress':
+      return 'In progress';
+    case 'success':
+      return 'Success';
+    case 'error':
+      return 'Failed';
+    default:
+      return status;
+  }
+}
+
+function transferStatusGlyph(status: TransferStatus) {
+  switch (status) {
+    case 'success':
+      return '✓';
+    case 'error':
+      return '×';
+    case 'in-progress':
+      return '↻';
+    case 'queued':
+      return '…';
+    default:
+      return '•';
+  }
+}
+
 interface TransferModalProps {
   isOpen: boolean;
   activeTab: TransferView;
@@ -238,6 +268,16 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
     </span>
   );
 
+  const renderStatusIcon = (status: TransferStatus) => (
+    <span
+      className={`transfer-status-icon ${status}`}
+      title={transferStatusLabel(status)}
+      aria-label={transferStatusLabel(status)}
+    >
+      {transferStatusGlyph(status)}
+    </span>
+  );
+
   const renderCompletedSummary = (t: TransferRecord) => {
     if (!isTransferCompleted(t.status)) return null;
     const avgSpeed = getTransferAverageSpeed(t) || t.speedBytesPerSec;
@@ -321,12 +361,12 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                 {t.localPath}
               </button>
             )}
-          </div>
-          <div className="transfer-status transfer-status-single">
-            <span className={`transfer-badge ${t.status}`}>{t.status}</span>
-            {renderStatusMeta(t, isCompleted, speedForMeta)}
-          </div>
-        </div>
+	          </div>
+	          <div className="transfer-status transfer-status-single">
+	            {renderStatusIcon(t.status)}
+	            {renderStatusMeta(t, isCompleted, speedForMeta)}
+	          </div>
+	        </div>
 
         {showProgress && (
           <div className="transfer-progress transfer-progress-short">
@@ -477,12 +517,12 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                           {doneCount} / {fileCount} files
                           {group.errorCount ? ` (${group.errorCount} failed)` : ''}
                         </div>
-                      </div>
-                      <div className="transfer-status">
-                        <span className={`transfer-badge ${group.status}`}>{group.status}</span>
-                        {renderCompletedSummary(group)}
-                      </div>
-                    </div>
+	                      </div>
+	                      <div className="transfer-status">
+	                        {renderStatusIcon(group.status)}
+	                        {renderCompletedSummary(group)}
+	                      </div>
+	                    </div>
 
                     {expanded && (
                       <>
@@ -515,12 +555,12 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                                     <div className="transfer-child-name" title={child.name}>
                                       {child.name}
                                     </div>
-                                  </div>
-                                  <span className={`transfer-badge ${child.status}`}>{child.status}</span>
-                                </div>
-                                <div className="transfer-child-path" title={childOssPath}>
-                                  {childOssPath}
-                                </div>
+	                                  </div>
+	                                  {renderStatusIcon(child.status)}
+	                                </div>
+	                                <div className="transfer-child-path" title={childOssPath}>
+	                                  {childOssPath}
+	                                </div>
                                 {child.localPath && (
                                   <button
                                     className="transfer-local transfer-local-link"

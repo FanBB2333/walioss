@@ -6,10 +6,11 @@ import AboutModal from './components/AboutModal';
 import FileBrowser from './components/FileBrowser';
 import TransferModal from './components/TransferModal';
 import { main } from '../wailsjs/go/models';
-import { EnqueueUploadPaths, GetSettings, GetTransferHistory, MoveObject } from '../wailsjs/go/main/OSSService';
+import { GetSettings, GetTransferHistory, MoveObject } from '../wailsjs/go/main/OSSService';
 import { GetAppInfo, OpenFile, OpenInFinder } from '../wailsjs/go/main/App';
 import { EventsEmit, EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { canReadOssDragPayload, readOssDragPayload } from './ossDrag';
+import { enqueueUploadWithRenamePrompt } from './upload';
 
 type GlobalView = 'session' | 'settings';
 
@@ -518,7 +519,7 @@ function App() {
       }
 
       const prefix = normalizePrefix(activeTab?.prefix || '');
-      void EnqueueUploadPaths(sessionConfig, bucket, prefix, paths)
+      void enqueueUploadWithRenamePrompt(sessionConfig, bucket, prefix, paths)
         .then((ids) => {
           if (!Array.isArray(ids) || ids.length === 0) return;
           setTransferView('upload');

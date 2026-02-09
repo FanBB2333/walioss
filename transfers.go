@@ -546,6 +546,11 @@ type uploadPlan struct {
 	TotalSize int64
 }
 
+type UploadRootSpec struct {
+	LocalPath  string `json:"localPath"`
+	RemoteName string `json:"remoteName,omitempty"`
+}
+
 type transferGroupChildState struct {
 	TotalBytes       int64
 	DoneBytes        int64
@@ -683,6 +688,59 @@ func buildUploadPlan(localPath string) (uploadPlan, error) {
 
 	if len(plan.Files) == 0 {
 		return uploadPlan{}, errors.New("folder has no files to upload")
+	}
+
+	return plan, nil
+}
+
+func buildUploadPlanWithRemoteName(localPath string, remoteName string) (uploadPlan, error) {
+	plan, err := buildUploadPlan(localPath)
+	if err != nil {
+		return uploadPlan{}, err
+	}
+
+	remoteName = strings.TrimSpace(remoteName)
+	if remoteName == "" {
+		return plan, nil
+	}
+	remoteName = strings.Trim(remoteName, "/")
+	remoteName = strings.Trim(remoteName, "\\")
+	remoteName = strings.TrimSpace(remoteName)
+	if remoteName == "" {
+		return uploadPlan{}, errors.New("remote name is empty")
+	}
+	if strings.Contains(remoteName, "/") || strings.Contains(remoteName, "\\") {
+		return uploadPlan{}, fmt.Errorf("invalid remote name: %s", remoteName)
+	}
+
+	if !plan.IsDir {
+		plan.RootName = remoteName
+		if len(plan.Files) > 0 {
+			plan.Files[0].RelativeKey = remoteName
+			plan.Files[0].DisplayName = remoteName
+		}
+		return plan, nil
+	}
+
+	previousRoot := plan.RootName
+	if previousRoot == "" || previousRoot == remoteName {
+		plan.RootName = remoteName
+		return plan, nil
+	}
+
+	plan.RootName = remoteName
+	for i := range plan.Files {
+		oldKey := plan.Files[i].RelativeKey
+		suffix := strings.TrimPrefix(oldKey, previousRoot)
+		suffix = strings.TrimPrefix(suffix, "/")
+		if suffix == "" {
+			plan.Files[i].RelativeKey = remoteName
+			plan.Files[i].DisplayName = remoteName
+			continue
+		}
+		newKey := path.Join(remoteName, suffix)
+		plan.Files[i].RelativeKey = newKey
+		plan.Files[i].DisplayName = newKey
 	}
 
 	return plan, nil
@@ -951,6 +1009,41 @@ func (s *OSSService) EnqueueUploadPaths(config OSSConfig, bucket string, prefix 
 			continue
 		}
 		plan, err := buildUploadPlan(localPath)
+		if err != nil {
+			return nil, err
+		}
+		plans = append(plans, plan)
+	}
+	if len(plans) == 0 {
+		return nil, errors.New("no local paths to upload")
+	}
+
+	ids := make([]string, 0, len(plans))
+	for _, plan := range plans {
+		id, err := s.enqueueUploadPlan(config, bucket, prefix, plan)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (s *OSSService) EnqueueUploadRoots(config OSSConfig, bucket string, prefix string, roots []UploadRootSpec) ([]string, error) {
+	bucket = normalizeTransferBucket(bucket)
+	if bucket == "" {
+		return nil, errors.New("bucket is empty")
+	}
+
+	prefix = normalizeTransferPrefix(prefix)
+
+	plans := make([]uploadPlan, 0, len(roots))
+	for _, root := range roots {
+		localPath := strings.TrimSpace(root.LocalPath)
+		if localPath == "" {
+			continue
+		}
+		plan, err := buildUploadPlanWithRemoteName(localPath, root.RemoteName)
 		if err != nil {
 			return nil, err
 		}
