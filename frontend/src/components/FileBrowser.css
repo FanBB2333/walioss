@@ -162,7 +162,7 @@
     left: 0;
     min-width: 420px;
     max-width: calc(100vw - 56px);
-    padding: 8px 14px 8px 8px;
+    padding: 8px 20px 8px 8px;
     background: #1e1e36;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 12px;
@@ -208,6 +208,73 @@
 
 .bookmark-popup-item:hover {
     background: rgba(255, 255, 255, 0.08);
+}
+
+.bookmark-popup-drag-handle {
+    width: 22px;
+    height: 22px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: grab;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+    margin-top: 1px;
+    opacity: 0.78;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.bookmark-popup-item:hover .bookmark-popup-drag-handle {
+    opacity: 1;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.bookmark-popup-drag-handle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.bookmark-popup-drag-handle:active {
+    cursor: grabbing;
+}
+
+.bookmark-popup-drag-handle:focus-visible {
+    outline: 2px solid rgba(79, 172, 254, 0.55);
+    outline-offset: 2px;
+}
+
+.bookmark-popup-item.dragging {
+    opacity: 0.55;
+}
+
+.bookmark-popup-item.drag-over-before,
+.bookmark-popup-item.drag-over-after {
+    position: relative;
+}
+
+.bookmark-popup-item.drag-over-before::before,
+.bookmark-popup-item.drag-over-after::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    height: 2px;
+    border-radius: 999px;
+    background: rgba(79, 172, 254, 0.95);
+    box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.16);
+    pointer-events: none;
+}
+
+.bookmark-popup-item.drag-over-before::before {
+    top: 2px;
+}
+
+.bookmark-popup-item.drag-over-after::after {
+    bottom: 2px;
 }
 
 .bookmark-popup-main {
@@ -266,11 +333,16 @@
     position: absolute;
     top: 0;
     right: 0;
-    width: 12px;
+    width: 18px;
     height: 100%;
-    cursor: ew-resize;
+    cursor: col-resize;
     user-select: none;
     touch-action: none;
+    transition: background 0.12s ease;
+}
+
+.bookmark-popup-resizer:hover {
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .bookmark-popup-resizer::before {
@@ -644,7 +716,7 @@
 }
 
 .browser-upload-dropzone.wails-drop-target-active::before {
-    content: '松开鼠标即可上传文件或文件夹';
+    content: 'Drop to upload files or folders';
     position: absolute;
     top: 50%;
     left: 50%;
@@ -1406,6 +1478,29 @@ body.theme-light .file-browser .bookmark-popup-empty {
 
 body.theme-light .file-browser .bookmark-popup-item:hover {
     background: rgba(15, 23, 42, 0.06);
+}
+
+body.theme-light .file-browser .bookmark-popup-drag-handle {
+    color: rgba(15, 23, 42, 0.5);
+}
+
+body.theme-light .file-browser .bookmark-popup-item:hover .bookmark-popup-drag-handle {
+    color: rgba(15, 23, 42, 0.78);
+}
+
+body.theme-light .file-browser .bookmark-popup-drag-handle:hover {
+    background: rgba(15, 23, 42, 0.06);
+    border-color: rgba(15, 23, 42, 0.12);
+}
+
+body.theme-light .file-browser .bookmark-popup-item.drag-over-before::before,
+body.theme-light .file-browser .bookmark-popup-item.drag-over-after::after {
+    background: rgba(14, 165, 233, 0.95);
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.16);
+}
+
+body.theme-light .file-browser .bookmark-popup-resizer:hover {
+    background: rgba(15, 23, 42, 0.03);
 }
 
 body.theme-light .file-browser .bookmark-popup-label {

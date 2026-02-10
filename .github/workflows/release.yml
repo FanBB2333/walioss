@@ -28,6 +28,12 @@ jobs:
         with:
           version: 9
 
+      - name: Ensure pnpm store dir exists (for setup-node cache)
+        run: |
+          pnpm config set store-dir ~/.pnpm-store
+          STORE_PATH="$(pnpm store path --silent)"
+          mkdir -p "$STORE_PATH"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

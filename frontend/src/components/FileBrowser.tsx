@@ -25,6 +25,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const BOOKMARK_POPUP_DEFAULT_WIDTH = 560;
 const BOOKMARK_POPUP_MIN_WIDTH = 420;
 const BOOKMARK_POPUP_VIEWPORT_MARGIN = 56;
+const BOOKMARK_REORDER_DRAG_TYPE = 'application/x-walioss-bookmark-reorder';
 
 const IMAGE_THUMB_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tif', 'tiff']);
 
@@ -104,6 +105,11 @@ type Bookmark = {
   label: string;
 };
 
+type BookmarkDragOverState = {
+  id: string;
+  placeAfter: boolean;
+};
+
 type NavLocation = {
   bucket: string;
   prefix: string;
@@ -126,6 +132,27 @@ type CrumbPopoverState = {
   hasMore: boolean;
   loading: boolean;
   error: string | null;
+};
+
+const canReadBookmarkReorderPayload = (dt: DataTransfer | null | undefined) => {
+  if (!dt) return false;
+  try {
+    return Array.from(dt.types || []).includes(BOOKMARK_REORDER_DRAG_TYPE);
+  } catch {
+    return false;
+  }
+};
+
+const readBookmarkReorderPayload = (dt: DataTransfer | null | undefined, fallback: string | null) => {
+  if (dt) {
+    try {
+      const id = dt.getData(BOOKMARK_REORDER_DRAG_TYPE);
+      if (id) return id;
+    } catch {
+      // Ignore and fallback to local state.
+    }
+  }
+  return fallback;
 };
 
 function FileBrowser({ config, profileName, initialPath, onLocationChange, onNotify }: FileBrowserProps) {
@@ -244,6 +271,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     startX: 0,
     startWidth: BOOKMARK_POPUP_DEFAULT_WIDTH,
   });
+  const [draggingBookmarkId, setDraggingBookmarkId] = useState<string | null>(null);
+  const [bookmarkDragOver, setBookmarkDragOver] = useState<BookmarkDragOverState | null>(null);
+  const bookmarkSuppressClickUntilRef = useRef<number>(0);
 
   const normalizeBucketName = (bucket: string) => bucket.trim().replace(/^\/+/, '').replace(/\/+$/, '');
 
@@ -288,6 +318,13 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
   useEffect(() => {
     setBookmarkMenuOpen(false);
   }, [storageKey]);
+
+  useEffect(() => {
+    if (!bookmarkMenuOpen) {
+      setDraggingBookmarkId(null);
+      setBookmarkDragOver(null);
+    }
+  }, [bookmarkMenuOpen]);
 
   useEffect(() => {
     try {
@@ -859,7 +896,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
       startX: e.clientX,
       startWidth: bookmarkPopupWidth,
     };
-    document.body.style.cursor = 'ew-resize';
+    document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   };
 
@@ -875,6 +912,85 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
       persistBookmarks(updated);
       return updated;
     });
+  };
+
+  const reorderBookmarks = (sourceId: string, targetId: string, placeAfter: boolean) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    setBookmarks((prev) => {
+      const sourceIndex = prev.findIndex((b) => b.id === sourceId);
+      const targetIndex = prev.findIndex((b) => b.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      if (!moved) return prev;
+
+      let insertIndex = targetIndex + (placeAfter ? 1 : 0);
+      if (sourceIndex < insertIndex) insertIndex -= 1;
+      insertIndex = Math.max(0, Math.min(insertIndex, next.length));
+      if (insertIndex === sourceIndex) return prev;
+
+      next.splice(insertIndex, 0, moved);
+      persistBookmarks(next);
+      return next;
+    });
+  };
+
+  const handleBookmarkDragStart = (e: React.DragEvent, id: string) => {
+    setDraggingBookmarkId(id);
+    setBookmarkDragOver(null);
+
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData(BOOKMARK_REORDER_DRAG_TYPE, id);
+      e.dataTransfer.setData('text/plain', id);
+    } catch {
+      // Some webviews may block custom mime types; local state is fallback.
+    }
+  };
+
+  const handleBookmarkDragEnd = () => {
+    setDraggingBookmarkId(null);
+    setBookmarkDragOver(null);
+  };
+
+  const handleBookmarkDragOver = (e: React.DragEvent, targetId: string) => {
+    if (!(canReadBookmarkReorderPayload(e.dataTransfer) || draggingBookmarkId)) return;
+    const sourceId = readBookmarkReorderPayload(e.dataTransfer, draggingBookmarkId);
+    if (!sourceId || sourceId === targetId) return;
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const placeAfter = e.clientY > rect.top + rect.height / 2;
+    setBookmarkDragOver((prev) => {
+      if (prev?.id === targetId && prev.placeAfter === placeAfter) return prev;
+      return { id: targetId, placeAfter };
+    });
+  };
+
+  const handleBookmarkDragLeave = (e: React.DragEvent, targetId: string) => {
+    if (!(canReadBookmarkReorderPayload(e.dataTransfer) || draggingBookmarkId)) return;
+    const related = e.relatedTarget as Node | null;
+    if (related && (e.currentTarget as HTMLElement).contains(related)) return;
+    setBookmarkDragOver((prev) => (prev?.id === targetId ? null : prev));
+  };
+
+  const handleBookmarkDrop = (e: React.DragEvent, targetId: string) => {
+    const sourceId = readBookmarkReorderPayload(e.dataTransfer, draggingBookmarkId);
+    if (!sourceId || sourceId === targetId) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const placeAfter = e.clientY > rect.top + rect.height / 2;
+    reorderBookmarks(sourceId, targetId, placeAfter);
+    bookmarkSuppressClickUntilRef.current = Date.now() + 280;
+
+    setDraggingBookmarkId(null);
+    setBookmarkDragOver(null);
   };
 
   const handleContextMenu = (e: React.MouseEvent, obj: main.ObjectInfo) => {
@@ -1689,13 +1805,47 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
                     {bookmarks.map((bm) => (
                       <div
                         key={bm.id}
-                        className="bookmark-popup-item"
+                        className={[
+                          'bookmark-popup-item',
+                          draggingBookmarkId === bm.id ? 'dragging' : '',
+                          bookmarkDragOver?.id === bm.id
+                            ? bookmarkDragOver.placeAfter
+                              ? 'drag-over-after'
+                              : 'drag-over-before'
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
                         onClick={() => {
+                          if (draggingBookmarkId) return;
+                          if (Date.now() < bookmarkSuppressClickUntilRef.current) return;
                           handleBookmarkClick(bm);
                           setBookmarkMenuOpen(false);
                         }}
                         title={`oss://${bm.bucket}/${bm.prefix}`}
+                        onDragOver={(e) => handleBookmarkDragOver(e, bm.id)}
+                        onDragLeave={(e) => handleBookmarkDragLeave(e, bm.id)}
+                        onDrop={(e) => handleBookmarkDrop(e, bm.id)}
                       >
+                        <button
+                          className="bookmark-popup-drag-handle"
+                          type="button"
+                          draggable
+                          onDragStart={(e) => handleBookmarkDragStart(e, bm.id)}
+                          onDragEnd={handleBookmarkDragEnd}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Drag to reorder"
+                          title="Drag to reorder"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                            <circle cx="4" cy="3" r="1" />
+                            <circle cx="8" cy="3" r="1" />
+                            <circle cx="4" cy="6" r="1" />
+                            <circle cx="8" cy="6" r="1" />
+                            <circle cx="4" cy="9" r="1" />
+                            <circle cx="8" cy="9" r="1" />
+                          </svg>
+                        </button>
                         <div className="bookmark-popup-main">
                           <div className="bookmark-popup-label">{bm.label}</div>
                           <div className="bookmark-popup-path">{`oss://${bm.bucket}/${bm.prefix}`}</div>

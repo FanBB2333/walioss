@@ -61,6 +61,26 @@ function formatEta(seconds?: number) {
   return `${m}:${pad(s)}`;
 }
 
+const pad2 = (n: number) => n.toString().padStart(2, '0');
+
+function formatLocalDateTime(ms?: number) {
+  if (!ms || !Number.isFinite(ms) || ms <= 0) return '-';
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '-';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function formatDurationMs(ms?: number) {
+  if (ms === undefined || ms === null) return '-';
+  if (!Number.isFinite(ms) || ms < 0) return '-';
+  const total = Math.floor(ms / 1000);
+  const s = total % 60;
+  const m = Math.floor(total / 60) % 60;
+  const h = Math.floor(total / 3600);
+  if (h > 0) return `${h}:${pad2(m)}:${pad2(s)}`;
+  return `${m}:${pad2(s)}`;
+}
+
 function formatProgress(doneBytes?: number, totalBytes?: number) {
   if (!doneBytes || !totalBytes || totalBytes <= 0) return 0;
   const p = (doneBytes / totalBytes) * 100;
@@ -134,6 +154,12 @@ function transferStatusGlyph(status: TransferStatus) {
     default:
       return '•';
   }
+}
+
+function transferItemKindLabel(t: TransferRecord) {
+  if (t.isGroup) return 'Folder';
+  if ((t.key || '').endsWith('/')) return 'Folder';
+  return 'File';
 }
 
 interface TransferModalProps {
@@ -268,6 +294,16 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
     </span>
   );
 
+  const renderKindBadge = (t: TransferRecord, compact = false) => {
+    const label = transferItemKindLabel(t);
+    const kind = label.toLowerCase();
+    return (
+      <span className={`transfer-kind-badge ${kind} ${compact ? 'compact' : ''}`} title={label}>
+        {label}
+      </span>
+    );
+  };
+
   const renderStatusIcon = (status: TransferStatus) => (
     <span
       className={`transfer-status-icon ${status}`}
@@ -330,12 +366,100 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
     </div>
   );
 
+  const renderTransferTiming = (t: TransferRecord, compact = false) => {
+    const isCompleted = isTransferCompleted(t.status);
+    const startMs = t.startedAtMs || t.updatedAtMs || 0;
+    const endMs = t.finishedAtMs || (isCompleted ? t.updatedAtMs || 0 : 0);
+    const durationMs = startMs > 0 ? Math.max(0, (endMs > 0 ? endMs : Date.now()) - startMs) : undefined;
+    const startText = startMs > 0 ? formatLocalDateTime(startMs) : '-';
+    const endText = endMs > 0 ? formatLocalDateTime(endMs) : '-';
+    const durationText = startMs > 0 ? formatDurationMs(durationMs) : '-';
+
+    if (compact) {
+      return (
+        <div className="transfer-timing-inline" aria-label="Transfer timing">
+          <span title={startText}>Start {startText}</span>
+          <span aria-hidden="true">·</span>
+          <span title={endText}>End {endText}</span>
+          <span aria-hidden="true">·</span>
+          <span title={durationText}>Duration {durationText}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="transfer-timing-meta" aria-label="Transfer timing">
+        <div className="transfer-timing-item">
+          <span className="meta-label">Start</span>
+          <span className="meta-value" title={startText}>
+            {startText}
+          </span>
+        </div>
+        <div className="transfer-timing-item">
+          <span className="meta-label">End</span>
+          <span className="meta-value" title={endText}>
+            {endText}
+          </span>
+        </div>
+        <div className="transfer-timing-item">
+          <span className="meta-label">Duration</span>
+          <span className="meta-value" title={durationText}>
+            {durationText}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTransferEndpoints = (t: TransferRecord, compact = false) => {
+    const ossPath = `oss://${t.bucket}/${t.key}`;
+    const kind = t.type === 'upload' ? 'upload' : 'download';
+    const fromLabel = t.type === 'upload' ? 'From (Local)' : 'From (OSS)';
+    const toLabel = t.type === 'upload' ? 'To (OSS)' : 'To (Local)';
+
+    const renderLocalValue = (localPath?: string) => {
+      if (!localPath) return <div className="transfer-endpoint-value">-</div>;
+      return (
+        <button
+          className={`transfer-endpoint-value transfer-local transfer-local-link ${compact ? 'compact' : ''}`.trim()}
+          type="button"
+          onClick={() => handleRevealLocalPath(localPath)}
+          title={`Reveal in Finder: ${localPath}`}
+          aria-label="Reveal local path in Finder"
+        >
+          {localPath}
+        </button>
+      );
+    };
+
+    const renderOssValue = () => (
+      <div className={`transfer-endpoint-value ${compact ? 'compact' : ''}`} title={ossPath}>
+        {ossPath}
+      </div>
+    );
+
+    const fromValue = t.type === 'upload' ? renderLocalValue(t.localPath) : renderOssValue();
+    const toValue = t.type === 'upload' ? renderOssValue() : renderLocalValue(t.localPath);
+
+    return (
+      <div className={`transfer-endpoints ${kind} ${compact ? 'compact' : ''}`.trim()} aria-label="Transfer route">
+        <div className="transfer-endpoint-row">
+          <span className="transfer-endpoint-label">{fromLabel}</span>
+          {fromValue}
+        </div>
+        <div className="transfer-endpoint-row">
+          <span className="transfer-endpoint-label">{toLabel}</span>
+          {toValue}
+        </div>
+      </div>
+    );
+  };
+
   const renderTransferCard = (t: TransferRecord) => {
     const progress = formatProgress(t.doneBytes, t.totalBytes);
     const showProgress = t.status === 'in-progress' || t.status === 'queued';
     const isCompleted = isTransferCompleted(t.status);
     const speedForMeta = isCompleted ? getTransferAverageSpeed(t) || t.speedBytesPerSec : t.speedBytesPerSec;
-    const ossPath = `oss://${t.bucket}/${t.key}`;
 
     return (
       <div key={t.id} className="transfer-card transfer-single-card">
@@ -343,24 +467,14 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
           <div className="transfer-main">
             <div className="transfer-title-row">
               {renderTypeMark(t.type)}
+              <span className="transfer-type-text">{transferTypeLabel(t.type)}</span>
               <div className="transfer-name" title={t.name}>
                 {t.name}
               </div>
+              {renderKindBadge(t)}
             </div>
-            <div className="transfer-path" title={ossPath}>
-              {ossPath}
-            </div>
-            {t.localPath && (
-              <button
-                className="transfer-local transfer-local-link"
-                type="button"
-                onClick={() => handleRevealLocalPath(t.localPath)}
-                title={`Reveal in Finder: ${t.localPath}`}
-                aria-label="Reveal local path in Finder"
-              >
-                {t.localPath}
-              </button>
-            )}
+            {renderTransferEndpoints(t)}
+            {renderTransferTiming(t)}
 	          </div>
 	          <div className="transfer-status transfer-status-single">
 	            {renderStatusIcon(t.status)}
@@ -477,7 +591,6 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                 const expanded = isItemExpanded(group.id, autoExpanded);
                 const progress = formatProgress(group.doneBytes, group.totalBytes);
                 const showProgress = group.status === 'in-progress' || group.status === 'queued';
-                const ossPath = `oss://${group.bucket}/${group.key}`;
                 const fileCount = group.fileCount || children.length;
                 const doneCount = group.doneCount || 0;
 
@@ -495,24 +608,14 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                             {expanded ? '▾' : '▸'}
                           </button>
                           {renderTypeMark(group.type)}
+                          <span className="transfer-type-text">{transferTypeLabel(group.type)}</span>
                           <div className="transfer-name" title={group.name}>
                             {group.name}
                           </div>
+                          {renderKindBadge(group)}
                         </div>
-                        <div className="transfer-path" title={ossPath}>
-                          {ossPath}
-                        </div>
-                        {group.localPath && (
-                          <button
-                            className="transfer-local transfer-local-link"
-                            type="button"
-                            onClick={() => handleRevealLocalPath(group.localPath)}
-                            title={`Reveal in Finder: ${group.localPath}`}
-                            aria-label="Reveal local path in Finder"
-                          >
-                            {group.localPath}
-                          </button>
-                        )}
+                        {renderTransferEndpoints(group)}
+                        {renderTransferTiming(group)}
                         <div className="transfer-group-summary">
                           {doneCount} / {fileCount} files
                           {group.errorCount ? ` (${group.errorCount} failed)` : ''}
@@ -545,33 +648,22 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
                           {(view.query ? visibleChildren : children).map((child) => {
                             const childProgress = formatProgress(child.doneBytes, child.totalBytes);
                             const childShowProgress = child.status === 'in-progress' || child.status === 'queued';
-                            const childOssPath = `oss://${child.bucket}/${child.key}`;
 
                             return (
                               <div key={child.id} className="transfer-child-card">
                                 <div className="transfer-child-head">
                                   <div className="transfer-child-title">
                                     {renderTypeMark(child.type, true)}
+                                    <span className="transfer-type-text compact">{transferTypeLabel(child.type)}</span>
                                     <div className="transfer-child-name" title={child.name}>
                                       {child.name}
                                     </div>
+                                    {renderKindBadge(child, true)}
 	                                  </div>
 	                                  {renderStatusIcon(child.status)}
 	                                </div>
-	                                <div className="transfer-child-path" title={childOssPath}>
-	                                  {childOssPath}
-	                                </div>
-                                {child.localPath && (
-                                  <button
-                                    className="transfer-local transfer-local-link"
-                                    type="button"
-                                    onClick={() => handleRevealLocalPath(child.localPath)}
-                                    title={`Reveal in Finder: ${child.localPath}`}
-                                    aria-label="Reveal local path in Finder"
-                                  >
-                                    {child.localPath}
-                                  </button>
-                                )}
+                                {renderTransferEndpoints(child, true)}
+                                {renderTransferTiming(child, true)}
                                 {childShowProgress && (
                                   <div className="transfer-child-progress">
                                     <div className="transfer-progress-bar">
