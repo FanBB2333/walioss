@@ -144,6 +144,8 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 
   const thumbUrlCacheRef = useRef<Map<string, string>>(new Map());
   const thumbLoadingRef = useRef<Set<string>>(new Set());
+  const thumbObserverRef = useRef<IntersectionObserver | null>(null);
+  const thumbObjectByPathRef = useRef<Map<string, main.ObjectInfo>>(new Map());
   const [_thumbTick, setThumbTick] = useState(0);
   const configSignature = useMemo(() => {
     return `${config.accessKeyId}|${config.endpoint}|${config.region}`;
@@ -152,6 +154,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
   useEffect(() => {
     thumbUrlCacheRef.current.clear();
     thumbLoadingRef.current.clear();
+    thumbObjectByPathRef.current.clear();
+    thumbObserverRef.current?.disconnect();
+    thumbObserverRef.current = null;
     setThumbTick((t) => t + 1);
   }, [configSignature]);
   const lastSelectionIndexRef = useRef<number | null>(null);
@@ -1349,11 +1354,49 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
   );
 
   useEffect(() => {
-    if (!currentBucket) return;
-    const candidates = objects.filter((o) => o?.path && isImageObjectInfo(o)).slice(0, 40);
-    for (const obj of candidates) {
-      void ensureThumbUrl(obj);
+    const nextMap = new Map<string, main.ObjectInfo>();
+    for (const obj of objects) {
+      if (!obj?.path) continue;
+      if (!isImageObjectInfo(obj)) continue;
+      nextMap.set(obj.path, obj);
     }
+    thumbObjectByPathRef.current = nextMap;
+
+    thumbObserverRef.current?.disconnect();
+    thumbObserverRef.current = null;
+
+    if (!currentBucket) return;
+    const root = tableViewportRef.current;
+    if (!root) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      // Fallback: eager load the first few thumbnails (keeps behavior reasonable on older runtimes).
+      const candidates = objects.filter((o) => o?.path && isImageObjectInfo(o)).slice(0, 40);
+      for (const obj of candidates) void ensureThumbUrl(obj);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries, obs) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const el = entry.target as HTMLElement;
+          const path = el.dataset.thumbPath;
+          if (!path) {
+            obs.unobserve(el);
+            continue;
+          }
+          const obj = thumbObjectByPathRef.current.get(path);
+          if (obj) void ensureThumbUrl(obj);
+          obs.unobserve(el);
+        }
+      },
+      { root, rootMargin: '180px 0px', threshold: 0.01 },
+    );
+
+    thumbObserverRef.current = observer;
+    const candidates = root.querySelectorAll<HTMLElement>('[data-thumb-path]');
+    candidates.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
   }, [currentBucket, ensureThumbUrl, objects]);
 
   const guessType = (name: string, fallback: string) => {
@@ -1927,7 +1970,14 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 		                      <tr
 		                        key={obj.path || obj.name}
 		                        className={`${obj.path && selectedPaths.has(obj.path) ? 'selected' : ''} ${dropTargetPath && obj.path === dropTargetPath ? 'drop-target' : ''}`.trim()}
-		                        onClick={() => (isFolder(obj) ? handleFolderClick(obj.name) : handlePreview(obj))}
+		                        onClick={(e) => {
+		                          if (e.shiftKey || shiftPressedRef.current) {
+		                            applyRowSelectionChange(obj, rowIndex, true, true);
+		                            return;
+		                          }
+		                          if (isFolder(obj)) handleFolderClick(obj.name);
+		                          else handlePreview(obj);
+		                        }}
 		                        onContextMenu={(e) => handleContextMenu(e, obj)}
 		                        onDragOver={(e) => handleRowDragOver(e, obj)}
 		                        onDragEnter={(e) => handleRowDragEnter(e, obj)}
@@ -1966,6 +2016,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 			                          >
 			                            <div
 			                              className={`file-icon ${isFolder(obj) ? 'folder-icon' : 'item-icon'}`}
+			                              data-thumb-path={obj.path && isImageObjectInfo(obj) ? obj.path : undefined}
 			                              onMouseEnter={() => {
 			                                if (!isImageObjectInfo(obj)) return;
 			                                void ensureThumbUrl(obj);
