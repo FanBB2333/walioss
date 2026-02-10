@@ -34,7 +34,7 @@ jobs:
           node-version: "20"
 
       - name: Install frontend dependencies
-        run: pnpm -C frontend install --frozen-lockfile
+        run: pnpm -C frontend install --no-frozen-lockfile
 
       - name: Install Wails CLI
         run: |
