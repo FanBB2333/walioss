@@ -921,9 +921,8 @@
     border: none;
     padding: 0;
     margin: 0;
-    font: inherit;
-    color: inherit;
-    text-align: left;
+    font-family: inherit;
+    text-align: right;
     white-space: normal;
     overflow: visible;
     text-overflow: clip;

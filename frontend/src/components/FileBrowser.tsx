@@ -2143,7 +2143,7 @@ function FileBrowser({ config, profileName, listViewMode = 'finder', initialPath
               <div className="details-row details-row-path">
                 <span className="details-label">Path</span>
                 <button
-                  className="details-value details-value-path mono"
+                  className="details-value details-value-path"
                   type="button"
                   title="Click to copy"
                   onClick={() => void handleCopyObjectPath(focusedObject)}
