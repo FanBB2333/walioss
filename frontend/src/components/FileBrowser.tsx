@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { main } from '../../wailsjs/go/models';
 import { CreateFile, CreateFolder, DeleteObject, EnqueueDownload, EnqueueDownloadFolder, ListBuckets, ListObjectsPage, MoveObject, PresignObject } from '../../wailsjs/go/main/OSSService';
 import { SelectDirectory, SelectFile, SelectSaveFile } from '../../wailsjs/go/main/App';
@@ -167,7 +167,14 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
   const [objects, setObjects] = useState<main.ObjectInfo[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
+  const [activePath, setActivePath] = useState<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
+
+  const selectedPathsRef = useRef<Set<string>>(selectedPaths);
+  const objectsRef = useRef<main.ObjectInfo[]>(objects);
+  const activePathRef = useRef<string | null>(activePath);
+  const previewModalOpenRef = useRef<boolean>(false);
+  const currentBucketRef = useRef<string>(currentBucket);
 
   const thumbUrlCacheRef = useRef<Map<string, string>>(new Map());
   const thumbLoadingRef = useRef<Set<string>>(new Set());
@@ -186,6 +193,22 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     thumbObserverRef.current = null;
     setThumbTick((t) => t + 1);
   }, [configSignature]);
+
+  useLayoutEffect(() => {
+    selectedPathsRef.current = selectedPaths;
+  }, [selectedPaths]);
+
+  useLayoutEffect(() => {
+    objectsRef.current = objects;
+  }, [objects]);
+
+  useLayoutEffect(() => {
+    activePathRef.current = activePath;
+  }, [activePath]);
+
+  useLayoutEffect(() => {
+    currentBucketRef.current = currentBucket;
+  }, [currentBucket]);
   const lastSelectionIndexRef = useRef<number | null>(null);
   const shiftPressedRef = useRef(false);
   const checkboxPointerShiftRef = useRef(false);
@@ -234,6 +257,10 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
   const createFileInputRef = useRef<HTMLInputElement>(null);
   const moveInputRef = useRef<HTMLInputElement>(null);
 
+  useLayoutEffect(() => {
+    previewModalOpenRef.current = previewModalOpen;
+  }, [previewModalOpen]);
+
   const tableViewportRef = useRef<HTMLDivElement>(null);
   const [columnWidths, setColumnWidths] = useState<number[]>(() => {
     const fallbackWidth = Math.max(720, window.innerWidth - 160);
@@ -244,7 +271,42 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') shiftPressedRef.current = true;
+      if (e.key === 'Shift') {
+        shiftPressedRef.current = true;
+        return;
+      }
+
+      const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
+      if (!isSpace) return;
+      if (previewModalOpenRef.current) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const targetEl = e.target as HTMLElement | null;
+      const tag = targetEl?.tagName?.toLowerCase() || '';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || targetEl?.isContentEditable) return;
+
+      if (!currentBucketRef.current) return;
+      const objectsSnapshot = objectsRef.current;
+      const selectedSnapshot = selectedPathsRef.current;
+      if (!objectsSnapshot.length || selectedSnapshot.size === 0) return;
+
+      const preferredPath = activePathRef.current;
+      let selectedObject: main.ObjectInfo | undefined;
+      if (preferredPath) {
+        const candidate = objectsSnapshot.find((obj) => obj.path === preferredPath);
+        if (candidate?.path && selectedSnapshot.has(candidate.path)) {
+          selectedObject = candidate;
+        }
+      }
+      if (!selectedObject) {
+        selectedObject = objectsSnapshot.find((obj) => obj.path && selectedSnapshot.has(obj.path));
+      }
+
+      if (!selectedObject || isFolderObjectInfo(selectedObject)) return;
+      e.preventDefault();
+      setPreviewObject(selectedObject);
+      setPreviewModalOpen(true);
+      setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Shift') shiftPressedRef.current = false;
@@ -391,9 +453,20 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 
   useEffect(() => {
     setSelectedPaths(new Set());
+    setActivePath(null);
     setDropTargetPath(null);
     lastSelectionIndexRef.current = null;
   }, [currentBucket, currentPrefix, pageIndex]);
+
+  useEffect(() => {
+    if (selectedPaths.size === 0) {
+      if (activePath !== null) setActivePath(null);
+      return;
+    }
+    if (activePath && selectedPaths.has(activePath)) return;
+    const firstSelected = objects.find((obj) => obj.path && selectedPaths.has(obj.path))?.path || null;
+    if (firstSelected !== activePath) setActivePath(firstSelected);
+  }, [activePath, objects, selectedPaths]);
 
   useEffect(() => {
     if (!currentBucket) return;
@@ -993,8 +1066,13 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     setBookmarkDragOver(null);
   };
 
-  const handleContextMenu = (e: React.MouseEvent, obj: main.ObjectInfo) => {
+  const handleContextMenu = (e: React.MouseEvent, obj: main.ObjectInfo, rowIndex: number) => {
     e.preventDefault();
+    if (obj.path) {
+      setActivePath(obj.path);
+      setSelectedPaths((prev) => (prev.has(obj.path as string) ? prev : new Set([obj.path as string])));
+      lastSelectionIndexRef.current = rowIndex;
+    }
     setContextMenu({
       visible: true,
       x: e.pageX,
@@ -1019,6 +1097,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 
   const clearSelection = () => {
     setSelectedPaths(new Set());
+    setActivePath(null);
     lastSelectionIndexRef.current = null;
   };
 
@@ -1387,10 +1466,22 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
     setContextMenu({ ...contextMenu, visible: false });
   };
 
+  const handleCopyObjectPath = async (obj: main.ObjectInfo | null) => {
+    if (!obj?.path) return;
+    try {
+      await navigator.clipboard.writeText(obj.path);
+      onNotify?.({ type: 'success', message: 'Path copied to clipboard' });
+    } catch {
+      onNotify?.({ type: 'error', message: 'Failed to copy path' });
+    }
+  };
+
   const handleOpenFolder = () => {
     const obj = contextMenu.object;
     if (!obj || !isFolder(obj)) return;
-    handleFolderClick(obj.name);
+    const folderName = objectNameForKey(obj.name);
+    if (!folderName) return;
+    handleFolderClick(folderName);
     setContextMenu({ ...contextMenu, visible: false });
   };
 
@@ -1438,6 +1529,53 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
       return next;
     });
     lastSelectionIndexRef.current = rowIndex;
+  };
+
+  const isInteractiveRowTarget = (target: EventTarget | null) => {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    return !!el.closest('button, a, input, textarea, select, option, label, [role="button"]');
+  };
+
+  const handleRowClick = (e: React.MouseEvent, obj: main.ObjectInfo, rowIndex: number) => {
+    if (!obj.path) return;
+    if (isInteractiveRowTarget(e.target)) return;
+
+    setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+    setActivePath(obj.path);
+
+    if (e.shiftKey || shiftPressedRef.current) {
+      applyRowSelectionChange(obj, rowIndex, true, true);
+      return;
+    }
+
+    if (e.metaKey || e.ctrlKey) {
+      const path = obj.path;
+      setSelectedPaths((prev) => {
+        const next = new Set(prev);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+      lastSelectionIndexRef.current = rowIndex;
+      return;
+    }
+
+    setSelectedPaths(new Set([obj.path]));
+    lastSelectionIndexRef.current = rowIndex;
+  };
+
+  const handleRowDoubleClick = (e: React.MouseEvent, obj: main.ObjectInfo) => {
+    if (isInteractiveRowTarget(e.target)) return;
+    setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+
+    if (isFolder(obj)) {
+      const folderName = objectNameForKey(obj.name);
+      if (folderName) handleFolderClick(folderName);
+      return;
+    }
+
+    handlePreview(obj);
   };
 
   const ensureThumbUrl = useCallback(
@@ -1739,9 +1877,26 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 	  const selectedObjects = objects.filter((obj) => !!obj.path && selectedPaths.has(obj.path));
 	  const selectedCount = selectedObjects.length;
 	  const allSelectedOnPage = objects.length > 0 && selectedCount === objects.length;
+    const focusedObject = useMemo(() => {
+      if (activePath) {
+        const direct = objects.find((obj) => obj.path === activePath);
+        if (direct) return direct;
+      }
+      return objects.find((obj) => obj.path && selectedPaths.has(obj.path)) || null;
+    }, [activePath, objects, selectedPaths]);
+    const focusedThumbUrl =
+      focusedObject && focusedObject.path && isImageObjectInfo(focusedObject)
+        ? thumbUrlCacheRef.current.get(focusedObject.path) || ''
+        : '';
 	  const previewableFiles = objects.filter((obj) => !isFolder(obj));
 	  const previewIndex =
 	    previewObject?.path ? previewableFiles.findIndex((obj) => obj.path === previewObject.path) : -1;
+
+    useEffect(() => {
+      if (!focusedObject) return;
+      if (!isImageObjectInfo(focusedObject)) return;
+      void ensureThumbUrl(focusedObject);
+    }, [focusedObject, ensureThumbUrl]);
 
 	  const handlePreviewNavigate = (direction: -1 | 1) => {
 	    if (previewIndex < 0) return;
@@ -1750,6 +1905,110 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 	    setPreviewObject(target);
 	    setPreviewModalOpen(true);
 	  };
+
+    const renderDetailsPane = () => {
+      if (!focusedObject) {
+        return (
+          <div className="details-panel">
+            <div className="details-empty">
+              <div className="details-empty-title">No Selection</div>
+              <div className="details-empty-hint">Click an item to select. Double-click or press Space to preview files.</div>
+            </div>
+          </div>
+        );
+      }
+
+      const folder = isFolder(focusedObject);
+
+      return (
+        <div className="details-panel">
+          <div className="details-scroll">
+            <div className="details-header">
+              <div className="details-preview">
+                {focusedThumbUrl ? (
+                  <img className="details-thumb" src={focusedThumbUrl} alt="" aria-hidden="true" draggable={false} />
+                ) : (
+                  <div className={`details-icon ${folder ? 'folder-icon' : 'item-icon'}`}>
+                    {folder ? (
+                      <svg width="72" height="72" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                      </svg>
+                    ) : (
+                      <svg width="72" height="72" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                      </svg>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="details-title">
+                <div className="details-name" title={focusedObject.name}>
+                  {focusedObject.name}
+                </div>
+                <div className="details-subtitle">
+                  {displayType(focusedObject)}
+                  {!folder ? ` · ${formatSize(focusedObject.size)}` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div className="details-actions">
+              {folder ? (
+                <>
+                  <button
+                    className="action-btn"
+                    type="button"
+                    onClick={() => {
+                      const folderName = objectNameForKey(focusedObject.name);
+                      if (!folderName) return;
+                      handleFolderClick(folderName);
+                    }}
+                  >
+                    Open
+                  </button>
+                  <button className="action-btn" type="button" onClick={() => void handleDownload(focusedObject)}>
+                    Download
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="action-btn" type="button" onClick={() => handlePreview(focusedObject)}>
+                    Preview
+                  </button>
+                  <button className="action-btn" type="button" onClick={() => void handleDownload(focusedObject)}>
+                    Download
+                  </button>
+                </>
+              )}
+              <button className="action-btn" type="button" onClick={() => void handleCopyObjectPath(focusedObject)}>
+                Copy Path
+              </button>
+            </div>
+
+            <div className="details-meta">
+              <div className="details-row">
+                <span className="details-label">Last Modified</span>
+                <span className="details-value">{focusedObject.lastModified || '-'}</span>
+              </div>
+              {!folder && (
+                <div className="details-row">
+                  <span className="details-label">Storage Class</span>
+                  <span className="details-value">{focusedObject.storageClass || '-'}</span>
+                </div>
+              )}
+              <div className="details-row">
+                <span className="details-label">Path</span>
+                <span className="details-value mono" title={focusedObject.path}>
+                  {focusedObject.path}
+                </span>
+              </div>
+              {!folder && <div className="details-hint">Tip: Double-click or press Space to preview.</div>}
+            </div>
+          </div>
+        </div>
+      );
+    };
 
 	  return (
 	    <div className="file-browser">
@@ -2006,7 +2265,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 	      )}
 
 	      <div
-          className={`browser-content ${currentBucket ? 'browser-upload-dropzone' : ''}`.trim()}
+          className={`browser-content ${currentBucket ? 'browser-upload-dropzone' : ''} ${currentBucket && objects.length > 0 ? 'browser-content-split' : ''}`.trim()}
           style={currentBucket ? ({ ['--wails-drop-target' as any]: 'drop' }) : undefined}
         >
 	        {loading ? (
@@ -2058,6 +2317,8 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
                 <p>Folder is empty.</p>
              </div>
 	          ) : (
+	            <div className="browser-split">
+                <div className="browser-split-left">
 	            <div className="file-table-container" onDragOver={handleTableDragOver} onDrop={handleTableDrop}>
 	              <div className="file-table-scroll" ref={tableViewportRef}>
 	                <table className="file-table">
@@ -2120,15 +2381,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 		                      <tr
 		                        key={obj.path || obj.name}
 		                        className={`${obj.path && selectedPaths.has(obj.path) ? 'selected' : ''} ${dropTargetPath && obj.path === dropTargetPath ? 'drop-target' : ''}`.trim()}
-		                        onClick={(e) => {
-		                          if (e.shiftKey || shiftPressedRef.current) {
-		                            applyRowSelectionChange(obj, rowIndex, true, true);
-		                            return;
-		                          }
-		                          if (isFolder(obj)) handleFolderClick(obj.name);
-		                          else handlePreview(obj);
-		                        }}
-		                        onContextMenu={(e) => handleContextMenu(e, obj)}
+		                        onClick={(e) => handleRowClick(e, obj, rowIndex)}
+                            onDoubleClick={(e) => handleRowDoubleClick(e, obj)}
+		                        onContextMenu={(e) => handleContextMenu(e, obj, rowIndex)}
 		                        onDragOver={(e) => handleRowDragOver(e, obj)}
 		                        onDragEnter={(e) => handleRowDragEnter(e, obj)}
 		                        onDragLeave={(e) => handleRowDragLeave(e, obj)}
@@ -2149,6 +2404,7 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 			                                const checked = e.target.checked;
 			                                const shiftRange = checkboxPointerShiftRef.current || shiftPressedRef.current;
 			                                checkboxPointerShiftRef.current = false;
+                                      if (obj.path) setActivePath(obj.path);
 			                                applyRowSelectionChange(obj, rowIndex, checked, shiftRange);
 			                              }}
 			                              aria-label={`Select ${obj.name}`}
@@ -2216,7 +2472,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
                                     className="link-btn"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleFolderClick(obj.name);
+                                      const folderName = objectNameForKey(obj.name);
+                                      if (!folderName) return;
+                                      handleFolderClick(folderName);
                                     }}
                                   >
                                     Open
@@ -2309,6 +2567,9 @@ function FileBrowser({ config, profileName, initialPath, onLocationChange, onNot
 	                </div>
 	              </div>
 	            </div>
+                </div>
+                <div className="browser-split-right">{renderDetailsPane()}</div>
+              </div>
 	          )
 	        )}
       </div>

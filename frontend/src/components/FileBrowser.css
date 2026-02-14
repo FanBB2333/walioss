@@ -711,6 +711,179 @@
     transition: background-color 220ms ease, color 220ms ease;
 }
 
+.browser-content.browser-content-split {
+    overflow: hidden;
+}
+
+.browser-split {
+    display: flex;
+    gap: 14px;
+    height: 100%;
+    min-height: 0;
+}
+
+.browser-split-left {
+    flex: 1;
+    min-width: 520px;
+    min-height: 0;
+    display: flex;
+}
+
+.browser-split-right {
+    flex: 0 0 340px;
+    width: 340px;
+    min-height: 0;
+    display: flex;
+}
+
+.details-panel {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.65);
+    transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease, color 220ms ease;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    user-select: text;
+}
+
+.details-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 14px 14px 16px 14px;
+}
+
+.details-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.details-preview {
+    width: 96px;
+    height: 96px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.details-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.details-icon {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.details-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.details-name {
+    font-size: 14px;
+    font-weight: 750;
+    color: rgba(255, 255, 255, 0.92);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.details-subtitle {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.details-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+    user-select: none;
+}
+
+.details-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.details-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.details-row:last-child {
+    border-bottom: none;
+}
+
+.details-label {
+    flex: 0 0 110px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.details-value {
+    flex: 1;
+    text-align: right;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.details-empty {
+    flex: 1;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.details-empty-title {
+    font-size: 13px;
+    font-weight: 750;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.details-empty-hint {
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.details-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
 .browser-upload-dropzone {
     position: relative;
 }
@@ -1332,6 +1505,54 @@ body.theme-light .file-browser .bucket-info {
 body.theme-light .file-browser .file-table-container {
     background: rgba(255, 255, 255, 0.85);
     border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .file-browser .details-panel {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: 0 18px 40px -28px rgba(15, 23, 42, 0.18);
+}
+
+body.theme-light .file-browser .details-preview {
+    background: rgba(15, 23, 42, 0.03);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+body.theme-light .file-browser .details-name {
+    color: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-light .file-browser .details-subtitle {
+    color: rgba(15, 23, 42, 0.55);
+}
+
+body.theme-light .file-browser .details-row {
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .file-browser .details-row:last-child {
+    border-bottom: none;
+}
+
+body.theme-light .file-browser .details-label,
+body.theme-light .file-browser .details-empty-hint {
+    color: rgba(15, 23, 42, 0.55);
+}
+
+body.theme-light .file-browser .details-value {
+    color: rgba(15, 23, 42, 0.88);
+}
+
+body.theme-light .file-browser .details-empty {
+    color: rgba(15, 23, 42, 0.6);
+}
+
+body.theme-light .file-browser .details-empty-title {
+    color: rgba(15, 23, 42, 0.85);
+}
+
+body.theme-light .file-browser .details-hint {
+    color: rgba(15, 23, 42, 0.45);
 }
 
 body.theme-light .file-browser .file-table th {
