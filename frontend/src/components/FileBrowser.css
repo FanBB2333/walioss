@@ -723,12 +723,14 @@
 }
 
 .browser-split-classic {
-    display: block;
+    flex-direction: column;
+    gap: 0;
 }
 
 .browser-split-classic .browser-split-left {
     min-width: 0;
     width: 100%;
+    flex: 1;
 }
 
 .browser-split-left {
@@ -756,6 +758,8 @@
     flex-direction: column;
     min-height: 0;
     user-select: text;
+    flex: 1;
+    width: 100%;
 }
 
 .details-scroll {
@@ -989,6 +993,7 @@
     min-height: 0;
     box-sizing: border-box;
     user-select: none;
+    flex: 1;
 }
 
 .file-table-scroll {
