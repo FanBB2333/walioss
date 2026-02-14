@@ -28,6 +28,12 @@ const BOOKMARK_POPUP_MIN_WIDTH = 420;
 const BOOKMARK_POPUP_VIEWPORT_MARGIN = 56;
 const BOOKMARK_REORDER_DRAG_TYPE = 'application/x-walioss-bookmark-reorder';
 
+const DETAILS_PANE_DEFAULT_WIDTH = 320;
+const DETAILS_PANE_MIN_WIDTH = 240;
+const DETAILS_PANE_RESIZER_WIDTH = 10;
+const TABLE_PANE_MIN_WIDTH = 420;
+const DETAILS_PANE_WIDTH_STORAGE_KEY = 'walioss:filebrowser:detailsPaneWidth';
+
 const IMAGE_THUMB_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tif', 'tiff']);
 
 const getFileExtensionLower = (name: string) => {
@@ -56,6 +62,16 @@ const clampBookmarkPopupWidth = (value: number) => {
     ? Math.max(BOOKMARK_POPUP_MIN_WIDTH, window.innerWidth - BOOKMARK_POPUP_VIEWPORT_MARGIN)
     : BOOKMARK_POPUP_DEFAULT_WIDTH;
   return Math.max(BOOKMARK_POPUP_MIN_WIDTH, Math.min(Math.round(value), viewportMax));
+};
+
+const clampDetailsPaneWidth = (value: number, containerWidth: number) => {
+  const safeContainerWidth = Number.isFinite(containerWidth) && containerWidth > 0
+    ? containerWidth
+    : TABLE_PANE_MIN_WIDTH + DETAILS_PANE_RESIZER_WIDTH + DETAILS_PANE_DEFAULT_WIDTH;
+  const min = DETAILS_PANE_MIN_WIDTH;
+  const max = Math.max(min, Math.floor(safeContainerWidth) - TABLE_PANE_MIN_WIDTH - DETAILS_PANE_RESIZER_WIDTH);
+  if (!Number.isFinite(value)) return Math.min(max, Math.max(min, DETAILS_PANE_DEFAULT_WIDTH));
+  return Math.max(min, Math.min(Math.round(value), max));
 };
 
 const sumWidths = (widths: number[]) => widths.reduce((sum, w) => sum + w, 0);
@@ -178,6 +194,27 @@ function FileBrowser({ config, profileName, listViewMode = 'finder', initialPath
   const previewModalOpenRef = useRef<boolean>(false);
   const currentBucketRef = useRef<string>(currentBucket);
   const isFinderViewRef = useRef<boolean>(isFinderView);
+
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const [detailsPaneWidth, setDetailsPaneWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return DETAILS_PANE_DEFAULT_WIDTH;
+    const viewportWidth = window.innerWidth;
+    try {
+      const raw = localStorage.getItem(DETAILS_PANE_WIDTH_STORAGE_KEY);
+      if (!raw) return clampDetailsPaneWidth(DETAILS_PANE_DEFAULT_WIDTH, viewportWidth);
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed <= 0) return clampDetailsPaneWidth(DETAILS_PANE_DEFAULT_WIDTH, viewportWidth);
+      return clampDetailsPaneWidth(parsed, viewportWidth);
+    } catch {
+      return clampDetailsPaneWidth(DETAILS_PANE_DEFAULT_WIDTH, viewportWidth);
+    }
+  });
+  const detailsPaneResizeStateRef = useRef<{ active: boolean; startX: number; startWidth: number; containerWidth: number }>({
+    active: false,
+    startX: 0,
+    startWidth: DETAILS_PANE_DEFAULT_WIDTH,
+    containerWidth: 0,
+  });
 
   const thumbUrlCacheRef = useRef<Map<string, string>>(new Map());
   const thumbLoadingRef = useRef<Set<string>>(new Set());
@@ -453,6 +490,60 @@ function FileBrowser({ config, profileName, listViewMode = 'finder', initialPath
       stopResizing();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isFinderView) return;
+    try {
+      localStorage.setItem(DETAILS_PANE_WIDTH_STORAGE_KEY, String(Math.round(detailsPaneWidth)));
+    } catch {
+      // Ignore localStorage write errors.
+    }
+  }, [detailsPaneWidth, isFinderView]);
+
+  useEffect(() => {
+    if (!isFinderView) return;
+    const handleResize = () => {
+      const width = splitContainerRef.current?.getBoundingClientRect().width || window.innerWidth;
+      setDetailsPaneWidth((prev) => clampDetailsPaneWidth(prev, width));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isFinderView]);
+
+  useEffect(() => {
+    const stopResizing = () => {
+      if (!detailsPaneResizeStateRef.current.active) return;
+      detailsPaneResizeStateRef.current.active = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const state = detailsPaneResizeStateRef.current;
+      if (!state.active) return;
+      const delta = state.startX - event.clientX;
+      setDetailsPaneWidth(clampDetailsPaneWidth(state.startWidth + delta, state.containerWidth));
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopResizing);
+    window.addEventListener('pointercancel', stopResizing);
+    window.addEventListener('blur', stopResizing);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResizing);
+      window.removeEventListener('pointercancel', stopResizing);
+      window.removeEventListener('blur', stopResizing);
+      stopResizing();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isFinderView) return;
+    if (!currentBucket || objects.length === 0) return;
+    const width = splitContainerRef.current?.getBoundingClientRect().width || window.innerWidth;
+    setDetailsPaneWidth((prev) => clampDetailsPaneWidth(prev, width));
+  }, [currentBucket, isFinderView, objects.length]);
 
   useEffect(() => {
     setPreviewModalOpen(false);
@@ -1932,6 +2023,32 @@ function FileBrowser({ config, profileName, listViewMode = 'finder', initialPath
 	    setPreviewModalOpen(true);
 	  };
 
+    const handleDetailsPaneResizerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isFinderView) return;
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const width = splitContainerRef.current?.getBoundingClientRect().width || window.innerWidth;
+      detailsPaneResizeStateRef.current.active = true;
+      detailsPaneResizeStateRef.current.startX = e.clientX;
+      detailsPaneResizeStateRef.current.startWidth = detailsPaneWidth;
+      detailsPaneResizeStateRef.current.containerWidth = width;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // Ignore pointer capture errors.
+      }
+    };
+
+    const handleDetailsPaneResizerDoubleClick = () => {
+      const width = splitContainerRef.current?.getBoundingClientRect().width || window.innerWidth;
+      setDetailsPaneWidth(clampDetailsPaneWidth(DETAILS_PANE_DEFAULT_WIDTH, width));
+    };
+
     const renderDetailsPane = () => {
       if (!focusedObject) {
         return (
@@ -2023,11 +2140,16 @@ function FileBrowser({ config, profileName, listViewMode = 'finder', initialPath
                   <span className="details-value">{focusedObject.storageClass || '-'}</span>
                 </div>
               )}
-              <div className="details-row">
+              <div className="details-row details-row-path">
                 <span className="details-label">Path</span>
-                <span className="details-value mono" title={focusedObject.path}>
+                <button
+                  className="details-value details-value-path mono"
+                  type="button"
+                  title="Click to copy"
+                  onClick={() => void handleCopyObjectPath(focusedObject)}
+                >
                   {focusedObject.path}
-                </span>
+                </button>
               </div>
               {!folder && <div className="details-hint">Tip: Double-click or press Space to preview.</div>}
             </div>
@@ -2343,7 +2465,7 @@ function FileBrowser({ config, profileName, listViewMode = 'finder', initialPath
                 <p>Folder is empty.</p>
              </div>
 	          ) : (
-	            <div className={`browser-split ${isFinderView ? '' : 'browser-split-classic'}`.trim()}>
+	            <div ref={splitContainerRef} className={`browser-split ${isFinderView ? '' : 'browser-split-classic'}`.trim()}>
                 <div className="browser-split-left">
 	            <div className="file-table-container" onDragOver={handleTableDragOver} onDrop={handleTableDrop}>
 	              <div className="file-table-scroll" ref={tableViewportRef}>
@@ -2594,7 +2716,25 @@ function FileBrowser({ config, profileName, listViewMode = 'finder', initialPath
 	              </div>
 	            </div>
                 </div>
-                {isFinderView && <div className="browser-split-right">{renderDetailsPane()}</div>}
+                {isFinderView && (
+                  <>
+                    <div
+                      className="browser-split-resizer"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Resize details pane"
+                      title="Drag to resize (double-click to reset)"
+                      onPointerDown={handleDetailsPaneResizerPointerDown}
+                      onDoubleClick={handleDetailsPaneResizerDoubleClick}
+                    />
+                    <div
+                      className="browser-split-right"
+                      style={{ width: `${detailsPaneWidth}px`, flex: `0 0 ${detailsPaneWidth}px` }}
+                    >
+                      {renderDetailsPane()}
+                    </div>
+                  </>
+                )}
               </div>
 	          )
 	        )}

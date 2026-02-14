@@ -713,11 +713,12 @@
 
 .browser-content.browser-content-split {
     overflow: hidden;
+    padding: 12px 14px;
 }
 
 .browser-split {
     display: flex;
-    gap: 14px;
+    gap: 0;
     height: 100%;
     min-height: 0;
 }
@@ -734,15 +735,56 @@
 }
 
 .browser-split-left {
-    flex: 1;
-    min-width: 520px;
+    flex: 1 1 auto;
+    min-width: 0;
     min-height: 0;
     display: flex;
 }
 
+.browser-split-resizer {
+    flex: 0 0 10px;
+    width: 10px;
+    cursor: col-resize;
+    user-select: none;
+    touch-action: none;
+    position: relative;
+    transition: background 0.12s ease;
+}
+
+.browser-split-resizer:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.browser-split-resizer::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.browser-split-resizer:hover::before {
+    background: rgba(255, 255, 255, 0.42);
+}
+
+.browser-split-resizer:active {
+    background: rgba(79, 172, 254, 0.08);
+}
+
+.browser-split-resizer:active::before {
+    background: rgba(79, 172, 254, 0.95);
+    box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.16);
+}
+
 .browser-split-right {
-    flex: 0 0 340px;
-    width: 340px;
+    flex: 0 0 320px;
+    width: 320px;
+    min-width: 240px;
     min-height: 0;
     display: flex;
 }
@@ -766,20 +808,20 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 14px 14px 16px 14px;
+    padding: 12px 12px 14px 12px;
 }
 
 .details-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
 .details-preview {
-    width: 96px;
-    height: 96px;
-    border-radius: 14px;
+    width: 88px;
+    height: 88px;
+    border-radius: 12px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
@@ -829,24 +871,28 @@
 .details-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 14px;
+    gap: 6px;
+    margin-bottom: 12px;
     user-select: none;
 }
 
 .details-meta {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .details-row {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
-    padding: 8px 0;
+    gap: 10px;
+    padding: 6px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.details-row.details-row-path {
+    align-items: flex-start;
 }
 
 .details-row:last-child {
@@ -868,6 +914,34 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.details-value.details-value-path {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
+    cursor: copy;
+    user-select: text;
+}
+
+.details-value.details-value-path:hover {
+    text-decoration: underline;
+}
+
+.details-value.details-value-path:focus-visible {
+    outline: 2px solid rgba(79, 172, 254, 0.55);
+    outline-offset: 2px;
+    border-radius: 10px;
 }
 
 .details-empty {
@@ -1555,6 +1629,31 @@ body.theme-light .file-browser .details-empty-hint {
 
 body.theme-light .file-browser .details-value {
     color: rgba(15, 23, 42, 0.88);
+}
+
+body.theme-light .file-browser .details-value.details-value-path:hover {
+    color: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-light .file-browser .browser-split-resizer:hover {
+    background: rgba(15, 23, 42, 0.03);
+}
+
+body.theme-light .file-browser .browser-split-resizer::before {
+    background: rgba(15, 23, 42, 0.18);
+}
+
+body.theme-light .file-browser .browser-split-resizer:hover::before {
+    background: rgba(15, 23, 42, 0.42);
+}
+
+body.theme-light .file-browser .browser-split-resizer:active {
+    background: rgba(14, 165, 233, 0.1);
+}
+
+body.theme-light .file-browser .browser-split-resizer:active::before {
+    background: rgba(14, 165, 233, 0.95);
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
 }
 
 body.theme-light .file-browser .details-empty {
