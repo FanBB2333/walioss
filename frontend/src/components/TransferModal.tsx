@@ -109,8 +109,44 @@ function getTransferAverageSpeed(t: TransferRecord) {
   return bytes / durationSeconds;
 }
 
-function transferSortValue(t: TransferRecord) {
-  return t.updatedAtMs || t.startedAtMs || t.finishedAtMs || 0;
+function parseTransferOrder(id: string) {
+  const match = /^tr-(\d+)-(\d+)$/.exec((id || '').trim());
+  if (!match) return null;
+
+  const timestamp = Number(match[1]);
+  const sequence = Number(match[2]);
+  if (!Number.isFinite(timestamp) || !Number.isFinite(sequence)) {
+    return null;
+  }
+
+  return { timestamp, sequence };
+}
+
+function transferOrderValue(t: TransferRecord) {
+  const parsed = parseTransferOrder(t.id);
+  if (parsed) {
+    return parsed;
+  }
+
+  return {
+    timestamp: t.startedAtMs || t.finishedAtMs || t.updatedAtMs || 0,
+    sequence: 0,
+  };
+}
+
+function compareTransfersByStableOrder(a: TransferRecord, b: TransferRecord, direction: 'asc' | 'desc') {
+  const left = transferOrderValue(a);
+  const right = transferOrderValue(b);
+
+  if (left.timestamp !== right.timestamp) {
+    return direction === 'asc' ? left.timestamp - right.timestamp : right.timestamp - left.timestamp;
+  }
+
+  if (left.sequence !== right.sequence) {
+    return direction === 'asc' ? left.sequence - right.sequence : right.sequence - left.sequence;
+  }
+
+  return direction === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
 }
 
 function transferMatches(t: TransferRecord, q: string) {
@@ -225,18 +261,19 @@ export default function TransferModal({ isOpen, activeTab, onTabChange, transfer
 
     const grouped = groups
       .map((group): GroupedTransfer | null => {
-        const children = [...(childrenByParent.get(group.id) || [])].sort((a, b) => a.id.localeCompare(b.id)); // STABLE SORT BY ID
+        // Keep child rows visually stable while progress updates stream in.
+        const children = [...(childrenByParent.get(group.id) || [])].sort((a, b) => compareTransfersByStableOrder(a, b, 'asc'));
         const visibleChildren = q ? children.filter((c) => transferMatches(c, q)) : children;
         const groupMatch = transferMatches(group, q);
         if (q && !groupMatch && visibleChildren.length === 0) return null;
         return { group, children, visibleChildren };
       })
       .filter((g): g is GroupedTransfer => !!g)
-      .sort((a, b) => transferSortValue(b.group) - transferSortValue(a.group));
+      .sort((a, b) => compareTransfersByStableOrder(a.group, b.group, 'desc'));
 
     const standaloneVisible = standalone
       .filter((t) => transferMatches(t, q))
-      .sort((a, b) => transferSortValue(b) - transferSortValue(a));
+      .sort((a, b) => compareTransfersByStableOrder(a, b, 'desc'));
 
     return {
       grouped,
